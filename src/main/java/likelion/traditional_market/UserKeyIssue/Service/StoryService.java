@@ -19,7 +19,7 @@ public class StoryService {
         // 고유한 userKey 생성
         String userKey = UUID.randomUUID().toString();
 
-        // User 엔티티 생성 및 데이터 설정
+        // User 엔티티 생성
         User user = new User();
         user.setUserKey(userKey);
         user.setMarket(market);

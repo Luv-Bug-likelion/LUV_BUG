@@ -11,6 +11,7 @@ import lombok.Setter;
 @Getter
 @Setter
 public class User {
+
     @Id
     private String userKey;
     private String market;

@@ -25,6 +25,7 @@ public class StoryController {
         );
 
         session.setAttribute("userKey", userKey);
+
         return ResponseEntity.ok(new CreateStoryResponse(200, "예산 입력 및 스토리 생성 완료", userKey));
     }
 }

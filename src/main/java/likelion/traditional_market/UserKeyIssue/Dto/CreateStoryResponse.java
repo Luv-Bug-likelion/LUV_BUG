@@ -10,6 +10,7 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CreateStoryResponse {
+
     private int code;
     private String message;
     private String storyId;
