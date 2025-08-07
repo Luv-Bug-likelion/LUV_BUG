@@ -13,5 +13,5 @@ public class CreateStoryResponse {
 
     private int code;
     private String message;
-    private String storyId;
+    private String userKey;
 }
