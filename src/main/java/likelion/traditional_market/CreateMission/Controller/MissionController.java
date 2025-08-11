@@ -26,7 +26,6 @@ public class MissionController {
         if (userKey == null) {
             return ResponseEntity.badRequest().body(null);
         }
-
         MissionStatusResponse response = missionService.generateMissionForUser(userKey);
         return ResponseEntity.ok(response);
     }

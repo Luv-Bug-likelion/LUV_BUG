@@ -26,6 +26,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class MissionService {
+
     private final UserRepository userRepository;
     private final ChatGptService chatGptService;
     private final MissionRepository missionRepository;

@@ -16,7 +16,6 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class LocationService {
-
     @Value("${kakao.api.key}")
     private String kakaoApiKey;
 
