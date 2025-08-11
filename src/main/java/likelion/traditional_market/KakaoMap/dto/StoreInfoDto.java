@@ -1,12 +1,12 @@
-package likelion.traditional_market.dto;
+package likelion.traditional_market.KakaoMap.dto;
 
-import lombok.AllArgsConstructor;
-import lombok.Setter;
-import lombok.Getter;
+import lombok.*;
 
 @Getter
 @Setter
+@NoArgsConstructor
 @AllArgsConstructor
+@EqualsAndHashCode
 public class StoreInfoDto {
     private String name;
     private String address;
