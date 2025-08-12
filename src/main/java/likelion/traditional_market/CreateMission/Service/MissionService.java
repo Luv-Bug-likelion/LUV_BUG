@@ -19,7 +19,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -35,18 +34,6 @@ public class MissionService {
     private final ChatGptService chatGptService;
     private final PriceService priceService;
     private final LocationService locationService;
-
-    @Transactional
-    public String createUserAndSave(String market, int budget, int storyId) {
-        String userKey = UUID.randomUUID().toString();
-        User user = new User();
-        user.setUserKey(userKey);
-        user.setMarket(market);
-        user.setBudget(budget);
-        user.setStoryId(storyId);
-        userRepository.save(user);
-        return userKey;
-    }
 
     @Transactional
     public MissionStatusResponse generateMissionForUser(String userKey) {
@@ -181,8 +168,10 @@ public class MissionService {
 
         List<Mission> missions = missionRepository.findByStoryId(user.getStoryId());
 
+        // 키워드 추출 로직 수정
         List<String> keywords = missions.stream()
                 .map(mission -> extractKeyword(mission.getMissionDetail()))
+                .filter(keyword -> !keyword.isEmpty()) // 빈 키워드는 제외
                 .distinct()
                 .collect(Collectors.toList());
 
@@ -190,11 +179,30 @@ public class MissionService {
     }
 
     private String extractKeyword(String missionDetail) {
-        Pattern pattern = Pattern.compile("^([가-힣a-zA-Z0-9]+)");
+        // 미션 상세 내용에서 재료명만 추출하도록 정규식 수정
+        // 예: "돼지고기 다짐육 300그램을 구매한다" -> "돼지고기 다짐육"
+        // "라면 5개입 한 묶음을 구매한다" -> "라면"
+        // "달걀 6구팩을 구매한다" -> "달걀"
+
+        // 정규식 패턴을 미션 내용에 맞게 수정
+        Pattern pattern = Pattern.compile("(.+?)(을|를)? 구매한다");
         Matcher matcher = pattern.matcher(missionDetail);
+
         if (matcher.find()) {
-            return matcher.group(1);
+            String fullItem = matcher.group(1).trim();
+
+            // "~ 한 묶음", "~ 6구팩"과 같은 불필요한 정보 제거
+            String[] parts = fullItem.split(" ");
+            String keyword = parts[0];
+
+            // "돼지고기 다짐육"과 같이 두 단어인 경우를 위해 처리
+            if (parts.length > 1 && (parts[1].equals("다짐육") || parts[1].equals("앞다리살"))) {
+                keyword = parts[0] + " " + parts[1];
+            }
+
+            return keyword;
         }
-        return "";
+
+        return ""; // 매칭되는 키워드가 없을 경우 빈 문자열 반환
     }
 }
