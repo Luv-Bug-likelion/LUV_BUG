@@ -9,6 +9,7 @@ import java.util.List;
 
 @Service
 public class ChatGptService {
+
     // ChatGpt API 호출 후 미션, 가격 생성
     // 하드코딩을 통해 출력 예시 반영
     public MissionStatusResponse generateMission(int storyId, int budget) {
