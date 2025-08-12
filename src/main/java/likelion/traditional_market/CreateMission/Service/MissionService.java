@@ -38,40 +38,49 @@ public class MissionService {
     @Transactional
     public MissionStatusResponse generateMissionForUser(String userKey) {
         User user = userRepository.findById(userKey)
-                .orElseThrow(() -> new RuntimeException("User not found with key: " + userKey));
+                .orElseThrow(() -> new IllegalArgumentException("User not found with key: " + userKey));
 
-        // ChatGPT API를 사용해 미션, 예상 가격 생성
+        // 이미 미션이 생성되었는지 확인
+        List<UserMission> existingMissions = userMissionRepository.findByUserKey(userKey);
+        if (!existingMissions.isEmpty()) {
+            return buildExistingMissionResponse(user, existingMissions);
+        }
+
+        // ChatGPT API 호출을 통한 미션 생성
         MissionStatusResponse chatGptResponse = chatGptService.generateMission(user.getStoryId(), user.getBudget());
 
-        // 가격 파일로 가격을 검증, 없는 품목은 ChatGPT에서 가격 생성
-        List<MissionDetailDto> missionDetails = chatGptResponse.getMissionList().stream()
-                .map(item -> {
-                    int priceFromCsv = priceService.getPrice(item.getMissionDetail(), user.getMarket());
+        // 가격 제약 조건 검증 및 재요청 로직
+        List<MissionDetailDto> generatedMissions = chatGptResponse.getMissionList();
+
+        // 가격 파일로 가격을 검증하고, 없는 품목은 ChatGPT 가격 사용
+        List<MissionDetailDto> finalMissionDetails = generatedMissions.stream()
+                .map(dto -> {
+                    int priceFromCsv = priceService.getPrice(dto.getMissionDetail(), user.getMarket());
                     if (priceFromCsv > 0) {
-                        item.setExpectedPrice(priceFromCsv);
+                        dto.setExpectedPrice(priceFromCsv);
                     }
-                    return item;
+                    return dto;
                 })
                 .collect(Collectors.toList());
 
-        // 가격 제약 검증 (수정 필요)
-        missionDetails.sort(Comparator.comparingInt(MissionDetailDto::getExpectedPrice).reversed());
-        int top3PriceSum = missionDetails.stream()
+        finalMissionDetails.sort(Comparator.comparingInt(MissionDetailDto::getExpectedPrice).reversed());
+        int top3PriceSum = finalMissionDetails.stream()
                 .limit(3)
                 .mapToInt(MissionDetailDto::getExpectedPrice)
                 .sum();
 
         if (top3PriceSum > user.getBudget()) {
-            throw new IllegalArgumentException("예상 가격이 예산을 초과합니다.");
+            throw new IllegalArgumentException("예상 가격이 예산을 초과하여 미션 생성에 실패했습니다.");
         }
 
-        // 생성된 미션 DB에 저장
+        // 3. 생성된 미션을 DB에 저장
         Story story = storyRepository.findById(user.getStoryId())
-                .orElseThrow(() -> new IllegalArgumentException("Story not found with key: " + user.getStoryId()));
+                .orElseThrow(() -> new IllegalArgumentException("Story not found"));
         story.setTitle(chatGptResponse.getMissionTitle());
+        story.setDescription(chatGptResponse.getMissionTitle()); // 예시로 description도 title과 동일하게 설정
         storyRepository.save(story);
 
-        List<Mission> missions = missionDetails.stream()
+        List<Mission> missions = finalMissionDetails.stream()
                 .map(dto -> {
                     Mission mission = new Mission();
                     mission.setStoryId(user.getStoryId());
@@ -96,9 +105,39 @@ public class MissionService {
         // 응답 DTO 생성
         return MissionStatusResponse.builder()
                 .missionTitle(story.getTitle())
-                .missionList(missionDetails)
+                .missionList(finalMissionDetails)
                 .totalSpent(0)
                 .missionCompleteCount(0)
+                .build();
+    }
+
+    // 기존 미션이 있을 경우 응답 DTO
+    private MissionStatusResponse buildExistingMissionResponse(User user, List<UserMission> userMissions) {
+        Story story = storyRepository.findById(user.getStoryId())
+                .orElseThrow(() -> new IllegalArgumentException("Story not found with key: " + user.getStoryId()));
+
+        List<Mission> missions = missionRepository.findAllById(
+                userMissions.stream().map(UserMission::getMissionId).collect(Collectors.toList())
+        );
+
+        List<MissionDetailDto> missionDetails = missions.stream()
+                .map(m -> MissionDetailDto.builder()
+                        .missionId(m.getMissionId())
+                        .missionDetail(m.getMissionDetail())
+                        .expectedPrice(m.getExpectedPrice())
+                        .isSuccess(userMissions.stream()
+                                .filter(um -> um.getMissionId() == m.getMissionId())
+                                .findFirst()
+                                .map(um -> um.isSuccess() ? true : false)
+                                .orElse(false))
+                        .build())
+                .collect(Collectors.toList());
+
+        return MissionStatusResponse.builder()
+                .missionTitle(story.getTitle())
+                .missionList(missionDetails)
+                .totalSpent(user.getTotalSpent())
+                .missionCompleteCount(user.getMissionCompleteCount())
                 .build();
     }
 
