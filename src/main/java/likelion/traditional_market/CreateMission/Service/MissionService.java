@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -28,34 +29,54 @@ import java.util.stream.Collectors;
 public class MissionService {
 
     private final UserRepository userRepository;
-    private final ChatGptService chatGptService;
-    private final MissionRepository missionRepository;
     private final StoryRepository storyRepository;
-    private final PriceService priceService;
+    private final MissionRepository missionRepository;
     private final UserMissionRepository userMissionRepository;
+    private final ChatGptService chatGptService;
+    private final PriceService priceService;
     private final LocationService locationService;
+
+    @Transactional
+    public String createUserAndSave(String market, int budget, int storyId) {
+        String userKey = UUID.randomUUID().toString();
+        User user = new User();
+        user.setUserKey(userKey);
+        user.setMarket(market);
+        user.setBudget(budget);
+        user.setStoryId(storyId);
+        userRepository.save(user);
+        return userKey;
+    }
 
     @Transactional
     public MissionStatusResponse generateMissionForUser(String userKey) {
         User user = userRepository.findById(userKey)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with key: " + userKey));
 
-        // 이미 미션이 생성되었는지 확인
         List<UserMission> existingMissions = userMissionRepository.findByUserKey(userKey);
         if (!existingMissions.isEmpty()) {
             return buildExistingMissionResponse(user, existingMissions);
         }
 
-        // ChatGPT API 호출을 통한 미션 생성
         MissionStatusResponse chatGptResponse = chatGptService.generateMission(user.getStoryId(), user.getBudget());
+        String missionTitle = chatGptResponse.getMissionTitle();
+        if (missionTitle == null || missionTitle.isEmpty()) {
+            throw new IllegalArgumentException("ChatGPT 응답에 missionTitle이 포함되어 있지 않습니다.");
+        }
 
-        // 가격 제약 조건 검증 및 재요청 로직
-        List<MissionDetailDto> generatedMissions = chatGptResponse.getMissionList();
-
-        // 가격 파일로 가격을 검증하고, 없는 품목은 ChatGPT 가격 사용
-        List<MissionDetailDto> finalMissionDetails = generatedMissions.stream()
+        List<MissionDetailDto> processedMissionDetails = chatGptResponse.getMissionList().stream()
                 .map(dto -> {
-                    int priceFromCsv = priceService.getPrice(dto.getMissionDetail(), user.getMarket());
+                    String detail = dto.getMissionDetail();
+                    if (detail != null) {
+                        dto.setMissionDetail(detail.replaceAll("시장 [^ ]+에서 ", ""));
+                    }
+                    return dto;
+                })
+                .collect(Collectors.toList());
+
+        List<MissionDetailDto> finalMissionDetails = processedMissionDetails.stream()
+                .map(dto -> {
+                    int priceFromCsv = priceService.getPrice(extractKeyword(dto.getMissionDetail()), user.getMarket());
                     if (priceFromCsv > 0) {
                         dto.setExpectedPrice(priceFromCsv);
                     }
@@ -73,14 +94,13 @@ public class MissionService {
             throw new IllegalArgumentException("예상 가격이 예산을 초과하여 미션 생성에 실패했습니다.");
         }
 
-        // 3. 생성된 미션을 DB에 저장
         Story story = storyRepository.findById(user.getStoryId())
                 .orElseThrow(() -> new IllegalArgumentException("Story not found"));
-        story.setTitle(chatGptResponse.getMissionTitle());
-        story.setDescription(chatGptResponse.getMissionTitle()); // 예시로 description도 title과 동일하게 설정
+        story.setTitle(missionTitle);
+        story.setDescription(missionTitle);
         storyRepository.save(story);
 
-        List<Mission> missions = finalMissionDetails.stream()
+        List<Mission> missionsToSave = finalMissionDetails.stream()
                 .map(dto -> {
                     Mission mission = new Mission();
                     mission.setStoryId(user.getStoryId());
@@ -89,9 +109,10 @@ public class MissionService {
                     return mission;
                 })
                 .collect(Collectors.toList());
-        missionRepository.saveAll(missions);
 
-        List<UserMission> userMissions = missions.stream()
+        List<Mission> savedMissions = missionRepository.saveAll(missionsToSave); // DB에 저장하고, ID가 부여된 엔티티 목록을 받음
+
+        List<UserMission> userMissions = savedMissions.stream()
                 .map(mission -> {
                     UserMission userMission = new UserMission();
                     userMission.setUserKey(userKey);
@@ -102,19 +123,29 @@ public class MissionService {
                 .collect(Collectors.toList());
         userMissionRepository.saveAll(userMissions);
 
-        // 응답 DTO 생성
+        // DB에서 생성된 ID를 포함한 DTO 리스트를 새로 만듭니다.
+        List<MissionDetailDto> responseMissionList = savedMissions.stream()
+                .map(mission -> MissionDetailDto.builder()
+                        .missionId(mission.getMissionId())
+                        .missionDetail(mission.getMissionDetail())
+                        .expectedPrice(mission.getExpectedPrice())
+                        .isSuccess(false)
+                        .build())
+                .collect(Collectors.toList());
+
         return MissionStatusResponse.builder()
+                .code(200)
+                .message("미션 목록 조회 성공")
+                .storyId(user.getStoryId()) // storyId 추가
                 .missionTitle(story.getTitle())
-                .missionList(finalMissionDetails)
+                .missionList(responseMissionList) // ID가 포함된 리스트로 교체
                 .totalSpent(0)
                 .missionCompleteCount(0)
                 .build();
     }
-
-    // 기존 미션이 있을 경우 응답 DTO
     private MissionStatusResponse buildExistingMissionResponse(User user, List<UserMission> userMissions) {
         Story story = storyRepository.findById(user.getStoryId())
-                .orElseThrow(() -> new IllegalArgumentException("Story not found with key: " + user.getStoryId()));
+                .orElseThrow(() -> new IllegalArgumentException("Story not found"));
 
         List<Mission> missions = missionRepository.findAllById(
                 userMissions.stream().map(UserMission::getMissionId).collect(Collectors.toList())
@@ -128,12 +159,14 @@ public class MissionService {
                         .isSuccess(userMissions.stream()
                                 .filter(um -> um.getMissionId() == m.getMissionId())
                                 .findFirst()
-                                .map(um -> um.isSuccess() ? true : false)
+                                .map(UserMission::isSuccess)
                                 .orElse(false))
                         .build())
                 .collect(Collectors.toList());
 
         return MissionStatusResponse.builder()
+                .code(200)
+                .message("기존 미션 목록 조회 성공")
                 .missionTitle(story.getTitle())
                 .missionList(missionDetails)
                 .totalSpent(user.getTotalSpent())
@@ -150,7 +183,7 @@ public class MissionService {
 
         List<String> keywords = missions.stream()
                 .map(mission -> extractKeyword(mission.getMissionDetail()))
-                .distinct() // 중복된 키워드를 제거
+                .distinct()
                 .collect(Collectors.toList());
 
         return locationService.searchStores(keywords, user.getMarket());
