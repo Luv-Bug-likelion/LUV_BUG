@@ -1,6 +1,5 @@
 package likelion.traditional_market.CreateMission.Service;
 
-import jakarta.transaction.Transactional;
 import likelion.traditional_market.CreateMission.Dto.MissionDetailDto;
 import likelion.traditional_market.CreateMission.Dto.MissionStatusResponse;
 import likelion.traditional_market.CreateMission.Entity.Mission;
@@ -9,24 +8,32 @@ import likelion.traditional_market.CreateMission.Entity.UserMission;
 import likelion.traditional_market.CreateMission.Reposiitory.MissionRepository;
 import likelion.traditional_market.CreateMission.Reposiitory.StoryRepository;
 import likelion.traditional_market.CreateMission.Reposiitory.UserMissionRepository;
+import likelion.traditional_market.KakaoMap.dto.StoreInfoDto;
+import likelion.traditional_market.KakaoMap.service.LocationService;
 import likelion.traditional_market.UserKeyIssue.Entity.User;
 import likelion.traditional_market.UserKeyIssue.Repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class MissionService {
+
     private final UserRepository userRepository;
     private final ChatGptService chatGptService;
     private final MissionRepository missionRepository;
     private final StoryRepository storyRepository;
     private final PriceService priceService;
     private final UserMissionRepository userMissionRepository;
+    private final LocationService locationService;
 
     @Transactional
     public MissionStatusResponse generateMissionForUser(String userKey) {
@@ -93,5 +100,29 @@ public class MissionService {
                 .totalSpent(0)
                 .missionCompleteCount(0)
                 .build();
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, List<StoreInfoDto>> getStoresForMissions(String userKey) {
+        User user = userRepository.findById(userKey)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with key: " + userKey));
+
+        List<Mission> missions = missionRepository.findByStoryId(user.getStoryId());
+
+        List<String> keywords = missions.stream()
+                .map(mission -> extractKeyword(mission.getMissionDetail()))
+                .distinct() // 중복된 키워드를 제거
+                .collect(Collectors.toList());
+
+        return locationService.searchStores(keywords, user.getMarket());
+    }
+
+    private String extractKeyword(String missionDetail) {
+        Pattern pattern = Pattern.compile("^([가-힣a-zA-Z0-9]+)");
+        Matcher matcher = pattern.matcher(missionDetail);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        return "";
     }
 }
