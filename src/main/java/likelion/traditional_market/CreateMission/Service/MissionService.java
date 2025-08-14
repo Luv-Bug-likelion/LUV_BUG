@@ -46,11 +46,9 @@ public class MissionService {
             return buildExistingMissionResponse(user, existingMissions);
         }
 
-        // 1. user의 storyId에 맞는 스토리를 조회합니다.
         Story story = storyRepository.findById(user.getStoryId())
                 .orElseThrow(() -> new IllegalArgumentException("Story not found"));
 
-        // ChatGPT로부터 미션 목록을 받습니다.
         ApiResponse<MissionStatusResponse> chatGptApiResponse = chatGptService.generateMission(user.getStoryId(), user.getBudget());
         MissionStatusResponse chatGptResponse = chatGptApiResponse.getData();
         String chatGptMissionTitle = chatGptResponse.getMissionTitle();
@@ -59,20 +57,14 @@ public class MissionService {
             throw new IllegalArgumentException("ChatGPT 응답에 missionTitle이 포함되어 있지 않습니다.");
         }
 
-        // 2. story의 title에 따라 missionTitle을 재가공합니다.
         String newMissionTitle;
         if (story.getTitle().equals("엄마의 심부름")) {
             newMissionTitle = "엄마가 " + chatGptMissionTitle + " 재료를 사오라고 했어요.";
         } else if (story.getTitle().equals("임꺽정의 여정")) {
             newMissionTitle = "임꺽정의 부천 시장 탐방: 주린 배를 채울 " + chatGptMissionTitle + " 재료를 찾아라!";
         } else {
-            newMissionTitle = chatGptMissionTitle; // 기본값
+            newMissionTitle = chatGptMissionTitle;
         }
-
-        // 3. 재가공한 제목으로 Story를 업데이트하고 저장합니다.
-        story.setTitle(newMissionTitle);
-        story.setDescription(newMissionTitle);
-        storyRepository.save(story);
 
         List<MissionDetailDto> processedMissionDetails = chatGptResponse.getMissionList().stream()
                 .map(dto -> {
@@ -138,7 +130,7 @@ public class MissionService {
 
         MissionStatusResponse response = MissionStatusResponse.builder()
                 .storyId(user.getStoryId())
-                .missionTitle(newMissionTitle) // 재가공한 제목으로 설정
+                .missionTitle(newMissionTitle)
                 .missionList(responseMissionList)
                 .totalSpent(0)
                 .missionCompleteCount(0)
@@ -168,8 +160,11 @@ public class MissionService {
                         .build())
                 .collect(Collectors.toList());
 
+        // 기존 스토리 제목을 그대로 사용
+        String missionTitle = story.getTitle();
+
         MissionStatusResponse response = MissionStatusResponse.builder()
-                .missionTitle(story.getTitle())
+                .missionTitle(missionTitle)
                 .missionList(missionDetails)
                 .totalSpent(user.getTotalSpent())
                 .missionCompleteCount(user.getMissionCompleteCount())
@@ -202,10 +197,16 @@ public class MissionService {
         Matcher matcher = pattern.matcher(missionDetail);
 
         if (matcher.find()) {
-            // '구매한다' 앞의 전체 텍스트를 추출
             String fullItem = matcher.group(1).trim();
-            return fullItem;
+            String[] parts = fullItem.split(" ");
+
+            if (parts.length > 1 && (parts[0].equals("돼지고기") || parts[0].equals("소고기"))) {
+                return fullItem;
+            }
+
+            return parts[0];
         }
+
         return "";
     }
 }
