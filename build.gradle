@@ -36,10 +36,18 @@ dependencies {
 	implementation 'org.springframework.cloud:spring-cloud-starter-openfeign'
 	implementation 'org.springframework.boot:spring-boot-starter-webflux'
 	implementation 'com.opencsv:opencsv:5.9'
+	testImplementation 'com.h2database:h2'
 }
 
 tasks.named('test') {
 	useJUnitPlatform()
+	systemProperty 'DB_HOST', findProperty('DB_HOST') ?: System.getenv('DB_HOST')
+	systemProperty 'DB_USERNAME', findProperty('DB_USERNAME') ?: System.getenv('DB_USERNAME')
+	systemProperty 'DB_PASSWORD', findProperty('DB_PASSWORD') ?: System.getenv('DB_PASSWORD')
+	systemProperty 'CHATGPT_API_KEY', findProperty('CHATGPT_API_KEY') ?: System.getenv('CHATGPT_API_KEY')
+	systemProperty 'KAKAO_API_KEY', findProperty('KAKAO_API_KEY') ?: System.getenv('KAKAO_API_KEY')
+	systemProperty 'NAVER_CLOUD_OCR_KEY', findProperty('NAVER_CLOUD_OCR_KEY') ?: System.getenv('NAVER_CLOUD_OCR_KEY')
+	systemProperty 'NAVER_OCR_INVOKE_URL', findProperty('NAVER_OCR_INVOKE_URL') ?: System.getenv('NAVER_OCR_INVOKE_URL')
 }
 
 dependencyManagement {
