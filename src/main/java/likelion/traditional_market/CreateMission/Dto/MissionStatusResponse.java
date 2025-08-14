@@ -16,12 +16,7 @@ import java.util.List;
 @EqualsAndHashCode
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonIgnoreProperties(ignoreUnknown = true)
-@JsonPropertyOrder({"code", "message", "storyId", "missionTitle", "missionList", "totalSpent", "missionCompleteCount"})
 public class MissionStatusResponse {
-    @JsonProperty("code")
-    private int code;
-    @JsonProperty("message")
-    private String message;
     private int storyId;
     private String missionTitle;
     private List<MissionDetailDto> missionList;

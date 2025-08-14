@@ -1,8 +1,8 @@
 package likelion.traditional_market.CreateMission.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import likelion.traditional_market.CreateMission.Dto.MissionDetailDto;
 import likelion.traditional_market.CreateMission.Dto.MissionStatusResponse;
+import likelion.traditional_market.common.ApiResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -18,7 +18,7 @@ public class ChatGptService {
     @Value("${chatgpt.api.key}")
     private String openaiApiKey;
 
-    public MissionStatusResponse generateMission(int storyId, int budget) {
+    public ApiResponse<MissionStatusResponse> generateMission(int storyId, int budget) {
         String prompt = buildPrompt(storyId, budget);
 
         WebClient webClient = WebClient.builder()
@@ -49,11 +49,8 @@ public class ChatGptService {
         ObjectMapper objectMapper = new ObjectMapper();
         try {
             MissionStatusResponse response = objectMapper.readValue(content, MissionStatusResponse.class);
-            response.setCode(200);
-            response.setMessage("ChatGPT 응답 성공");
-            return response;
+            return ApiResponse.success("ChatGPT 응답 성공", response);
         } catch (Exception e) {
-            // 예외 처리 로직 (파싱 실패 시)
             throw new RuntimeException("Failed to parse ChatGPT response", e);
         }
     }
@@ -67,14 +64,34 @@ public class ChatGptService {
     }
 
     public String classifyKeyword(String keyword) {
-        if ("깻잎".equals(keyword) || "상추".equals(keyword)) {
-            return "농산물";
-        } else if ("고등어".equals(keyword)) {
-            return "수산물";
-        } else if ("바나나".equals(keyword)) {
-            return "과일";
-        } else {
-            return "식품";
-        }
+        WebClient webClient = WebClient.builder()
+                .baseUrl("https://api.openai.com/v1/chat/completions")
+                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + openaiApiKey)
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .build();
+
+        String prompt = String.format(
+                "다음 키워드 '%s'가 어떤 카테고리에 속하는지 분류해줘. 카테고리는 '축산', '수산물', '농산물', '과일', '식품' 중 하나여야 해. 답변은 오직 카테고리 이름만 반환해줘. (예: '돼지고기 다짐육' -> '축산')",
+                keyword
+        );
+
+        Map<String, Object> requetBody = Map.of(
+                "model", "gpt-5",
+                "messages", List.of(
+                        Map.of("role", "system", "content", "You are a helpful assistant that only provides the category name."),
+                        Map.of("role", "user", "content", prompt)
+                )
+        );
+
+        Map<String, Object> apiResponse = webClient.post()
+                .bodyValue(requetBody)
+                .retrieve()
+                .bodyToMono(Map.class)
+                .block();
+
+        Map<String, Object> choice = ((List<Map<String, Object>>) apiResponse.get("choices")).get(0);
+        String content = (String) ((Map<String, Object>) choice.get("message")).get("content");
+
+        return content;
     }
 }

@@ -12,6 +12,7 @@ import likelion.traditional_market.KakaoMap.dto.StoreInfoDto;
 import likelion.traditional_market.KakaoMap.service.LocationService;
 import likelion.traditional_market.UserKeyIssue.Entity.User;
 import likelion.traditional_market.UserKeyIssue.Repository.UserRepository;
+import likelion.traditional_market.common.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,7 +37,7 @@ public class MissionService {
     private final LocationService locationService;
 
     @Transactional
-    public MissionStatusResponse generateMissionForUser(String userKey) {
+    public ApiResponse<MissionStatusResponse> generateMissionForUser(String userKey) {
         User user = userRepository.findById(userKey)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with key: " + userKey));
 
@@ -45,7 +46,8 @@ public class MissionService {
             return buildExistingMissionResponse(user, existingMissions);
         }
 
-        MissionStatusResponse chatGptResponse = chatGptService.generateMission(user.getStoryId(), user.getBudget());
+        ApiResponse<MissionStatusResponse> chatGptApiResponse = chatGptService.generateMission(user.getStoryId(), user.getBudget());
+        MissionStatusResponse chatGptResponse = chatGptApiResponse.getData();
         String missionTitle = chatGptResponse.getMissionTitle();
         if (missionTitle == null || missionTitle.isEmpty()) {
             throw new IllegalArgumentException("ChatGPT 응답에 missionTitle이 포함되어 있지 않습니다.");
@@ -97,7 +99,7 @@ public class MissionService {
                 })
                 .collect(Collectors.toList());
 
-        List<Mission> savedMissions = missionRepository.saveAll(missionsToSave); // DB에 저장하고, ID가 부여된 엔티티 목록을 받음
+        List<Mission> savedMissions = missionRepository.saveAll(missionsToSave);
 
         List<UserMission> userMissions = savedMissions.stream()
                 .map(mission -> {
@@ -110,7 +112,6 @@ public class MissionService {
                 .collect(Collectors.toList());
         userMissionRepository.saveAll(userMissions);
 
-        // DB에서 생성된 ID를 포함한 DTO 리스트를 새로 만듭니다.
         List<MissionDetailDto> responseMissionList = savedMissions.stream()
                 .map(mission -> MissionDetailDto.builder()
                         .missionId(mission.getMissionId())
@@ -120,17 +121,18 @@ public class MissionService {
                         .build())
                 .collect(Collectors.toList());
 
-        return MissionStatusResponse.builder()
-                .code(200)
-                .message("미션 목록 조회 성공")
-                .storyId(user.getStoryId()) // storyId 추가
+        MissionStatusResponse response = MissionStatusResponse.builder()
+                .storyId(user.getStoryId())
                 .missionTitle(story.getTitle())
-                .missionList(responseMissionList) // ID가 포함된 리스트로 교체
+                .missionList(responseMissionList)
                 .totalSpent(0)
                 .missionCompleteCount(0)
                 .build();
+
+        return ApiResponse.success("미션 목록 조회 성공", response);
     }
-    private MissionStatusResponse buildExistingMissionResponse(User user, List<UserMission> userMissions) {
+
+    private ApiResponse<MissionStatusResponse> buildExistingMissionResponse(User user, List<UserMission> userMissions) {
         Story story = storyRepository.findById(user.getStoryId())
                 .orElseThrow(() -> new IllegalArgumentException("Story not found"));
 
@@ -151,58 +153,52 @@ public class MissionService {
                         .build())
                 .collect(Collectors.toList());
 
-        return MissionStatusResponse.builder()
-                .code(200)
-                .message("기존 미션 목록 조회 성공")
+        MissionStatusResponse response = MissionStatusResponse.builder()
                 .missionTitle(story.getTitle())
                 .missionList(missionDetails)
                 .totalSpent(user.getTotalSpent())
                 .missionCompleteCount(user.getMissionCompleteCount())
                 .build();
+
+        return ApiResponse.success("기존 미션 목록 조회 성공", response);
     }
 
     @Transactional(readOnly = true)
-    public Map<String, List<StoreInfoDto>> getStoresForMissions(String userKey) {
+    public ApiResponse<Map<String, List<StoreInfoDto>>> getStoresForMissions(String userKey) {
         User user = userRepository.findById(userKey)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with key: " + userKey));
 
-        List<Mission> missions = missionRepository.findByStoryId(user.getStoryId());
+        List<UserMission> userMissions = userMissionRepository.findByUserKey(userKey);
+        List<Integer> missionIds = userMissions.stream().map(UserMission::getMissionId).collect(Collectors.toList());
+        List<Mission> missions = missionRepository.findAllById(missionIds);
 
-        // 키워드 추출 로직 수정
         List<String> keywords = missions.stream()
                 .map(mission -> extractKeyword(mission.getMissionDetail()))
-                .filter(keyword -> !keyword.isEmpty()) // 빈 키워드는 제외
+                .filter(keyword -> !keyword.isEmpty())
                 .distinct()
                 .collect(Collectors.toList());
 
-        return locationService.searchStores(keywords, user.getMarket());
+        Map<String, List<StoreInfoDto>> storeInfoMap = locationService.searchStores(keywords, user.getMarket());
+        return ApiResponse.success("상점 목록 조회 성공", storeInfoMap);
     }
 
     private String extractKeyword(String missionDetail) {
-        // 미션 상세 내용에서 재료명만 추출하도록 정규식 수정
-        // 예: "돼지고기 다짐육 300그램을 구매한다" -> "돼지고기 다짐육"
-        // "라면 5개입 한 묶음을 구매한다" -> "라면"
-        // "달걀 6구팩을 구매한다" -> "달걀"
-
-        // 정규식 패턴을 미션 내용에 맞게 수정
-        Pattern pattern = Pattern.compile("(.+?)(을|를)? 구매한다");
+        Pattern pattern = Pattern.compile("(.+?)( [0-9]+.*)?(을|를)? 구매한다");
         Matcher matcher = pattern.matcher(missionDetail);
 
         if (matcher.find()) {
             String fullItem = matcher.group(1).trim();
-
-            // "~ 한 묶음", "~ 6구팩"과 같은 불필요한 정보 제거
             String[] parts = fullItem.split(" ");
-            String keyword = parts[0];
 
-            // "돼지고기 다짐육"과 같이 두 단어인 경우를 위해 처리
-            if (parts.length > 1 && (parts[1].equals("다짐육") || parts[1].equals("앞다리살"))) {
-                keyword = parts[0] + " " + parts[1];
+            // "돼지고기 다짐육", "소고기 안심"과 같은 복합어 키워드 처리
+            if (parts.length > 1 && (parts[0].equals("돼지고기") || parts[0].equals("소고기"))) {
+                return fullItem;
             }
 
-            return keyword;
+            // 그 외 단일 키워드 추출
+            return parts[0];
         }
 
-        return ""; // 매칭되는 키워드가 없을 경우 빈 문자열 반환
+        return "";
     }
 }

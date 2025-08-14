@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpSession;
 import likelion.traditional_market.CreateMission.Dto.MissionStatusResponse;
 import likelion.traditional_market.CreateMission.Service.MissionService;
 import likelion.traditional_market.KakaoMap.dto.StoreInfoDto;
+import likelion.traditional_market.common.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,23 +22,23 @@ public class MissionController {
     private final MissionService missionService;
 
     @GetMapping
-    public ResponseEntity<MissionStatusResponse> getMissionStatus(HttpSession session) {
+    public ResponseEntity<ApiResponse<MissionStatusResponse>> getMissionStatus(HttpSession session) {
         String userKey = (String) session.getAttribute("userKey");
         if (userKey == null) {
-            return ResponseEntity.badRequest().body(null);
+            return ResponseEntity.badRequest().body(ApiResponse.error(400, "userKey가 없습니다."));
         }
-        MissionStatusResponse response = missionService.generateMissionForUser(userKey);
+        ApiResponse<MissionStatusResponse> response = missionService.generateMissionForUser(userKey);
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/stores")
-    public ResponseEntity<Map<String, List<StoreInfoDto>>> getStores(HttpSession session) {
+    public ResponseEntity<ApiResponse<Map<String, List<StoreInfoDto>>>> getStores(HttpSession session) {
         String userKey = (String) session.getAttribute("userKey");
         if (userKey == null) {
-            return ResponseEntity.badRequest().body(null);
+            return ResponseEntity.badRequest().body(ApiResponse.error(400, "userKey가 없습니다."));
         }
 
-        Map<String, List<StoreInfoDto>> storeInfoMap = missionService.getStoresForMissions(userKey);
+        ApiResponse<Map<String, List<StoreInfoDto>>> storeInfoMap = missionService.getStoresForMissions(userKey);
         return ResponseEntity.ok(storeInfoMap);
     }
 }
