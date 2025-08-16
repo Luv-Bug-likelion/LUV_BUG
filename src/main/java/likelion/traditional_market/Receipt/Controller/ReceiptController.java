@@ -25,7 +25,7 @@ public class ReceiptController {
     public ReceiptCheckResponse check(
             @RequestParam("image") @NotNull MultipartFile image,
             @RequestParam("user_key") @NotBlank String userkey,
-            @RequestParam("mission_id") @NotNull Long missionid
+            @RequestParam("mission_id") @NotNull Integer missionid
 
     )
     {
