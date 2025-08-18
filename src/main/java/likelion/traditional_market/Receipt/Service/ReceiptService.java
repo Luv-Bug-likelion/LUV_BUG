@@ -1,3 +1,5 @@
+// ReceiptService.java
+
 package likelion.traditional_market.Receipt.Service;
 
 import jakarta.transaction.Transactional;
@@ -40,30 +42,18 @@ public class ReceiptService {
             int score = receiptScorer.score(ex, hits);
 
             if (ex.getVisitDate() != null && ex.getVisitDate().isAfter(LocalDate.now(ZONE_SEOUL))) {
-                return ReceiptCheckResponse.builder()
-                        .status("FAIL").score(score)
-                        .merchantName(ex.getMerchantName())
-                        .visitDate(ex.getVisitDate())
-                        .totalAmount(ex.getSpentAmount())
-                        .message("영수증 날짜가 미래입니다. 재촬영해주세요.")
-                        .build();
+                return ReceiptCheckResponse.fail("영수증 날짜가 미래입니다. 재촬영해주세요.");
             }
             boolean hasCoreField = (ex.getSpentAmount() != null) || (ex.getVisitDate() != null);
             if (!hasCoreField) {
-                return ReceiptCheckResponse.builder()
-                        .status("FAIL").score(score)
-                        .merchantName(ex.getMerchantName())
-                        .visitDate(ex.getVisitDate())
-                        .totalAmount(ex.getSpentAmount())
-                        .message("핵심 정보(날짜/금액)를 인식하지 못했습니다. 재촬영해주세요.")
-                        .build();
+                return ReceiptCheckResponse.fail("핵심 정보(날짜/금액)를 인식하지 못했습니다. 재촬영해주세요.");
             }
-            String status = (score>=7) ? "SUCCESS" : "FAIL";
+            String status = (score >= 7) ? "SUCCESS" : "FAIL";
 
             if ("SUCCESS".equals(status)) {
                 UserMission userMission = userMissionRepository.findByUserKeyAndMissionId(userKey, missionId)
                         .orElseThrow(() -> new IllegalArgumentException("User mission not found"));
-                userMission.setSuccess(true); // isSuccess 값을 true로 설정
+                userMission.setSuccess(true);
                 userMissionRepository.save(userMission);
 
                 User user = userRepository.findById(userKey)
@@ -71,16 +61,11 @@ public class ReceiptService {
                 user.setTotalSpent(user.getTotalSpent() + ex.getSpentAmount());
                 user.setMissionCompleteCount(user.getMissionCompleteCount() + 1);
                 userRepository.save(user);
+
+                return ReceiptCheckResponse.success("영수증 인증 성공", score, ex);
             }
 
-            return ReceiptCheckResponse.builder()
-                    .status(status)
-                    .score(score)
-                    .merchantName(ex.getMerchantName())
-                    .visitDate(ex.getVisitDate())
-                    .totalAmount(ex.getSpentAmount())
-                    .message(status.equals("FAIL") ? "영수증 인식이 충분하지 않습니다. 재촬영해주세요." : null)
-                    .build();
+            return ReceiptCheckResponse.fail("영수증 인식이 충분하지 않습니다. 재촬영해주세요.");
 
         } catch (Exception e) {
             return ReceiptCheckResponse.fail("OCR 처리 실패: " + e.getMessage());
@@ -107,16 +92,10 @@ public class ReceiptService {
             user.setTotalSpent(user.getTotalSpent() + fields.getSpentAmount());
             user.setMissionCompleteCount(user.getMissionCompleteCount() + 1);
             userRepository.save(user);
+
+            return ReceiptCheckResponse.success("영수증 인증 성공", score, fields);
         }
 
-        return ReceiptCheckResponse.builder()
-                .status(status)
-                .score(score)
-                .merchantName(fields.getMerchantName())
-                .visitDate(fields.getVisitDate())
-                .totalAmount(fields.getSpentAmount())
-                .message(status.equals("FAIL") ? "테스트 실패" : null)
-                .build();
+        return ReceiptCheckResponse.fail("테스트 실패");
     }
 }
-
