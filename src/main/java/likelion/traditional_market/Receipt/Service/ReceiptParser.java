@@ -48,7 +48,7 @@ public class ReceiptParser {
             return ExtractedFields.builder()
                     .merchantName(merchant)
                     .visitDate(date)
-                    .totalAmount(total)
+                    .spentAmount(total)
                     .build();
 
         } catch (Exception e) {

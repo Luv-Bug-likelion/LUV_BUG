@@ -17,7 +17,7 @@ public class ReceiptScorer {
             s+=2;
         }
         if (ex.getVisitDate() != null) s += 2;
-        if (ex.getTotalAmount() != null) s += 3;
+        if (ex.getSpentAmount() != null) s += 3;
 
         return s;
     }

@@ -19,4 +19,5 @@ public class User {
     private int storyId;
     private int totalSpent;
     private int missionCompleteCount;
+    private String missionTitle;
 }

@@ -20,7 +20,7 @@ public class ReceiptCheckResponse {
                 .score(score)
                 .merchantName(ex.getMerchantName())
                 .visitDate(ex.getVisitDate())
-                .totalAmount(ex.getTotalAmount())
+                .totalAmount(ex.getSpentAmount())
                 .message(reasons == null || reasons.isEmpty() ? null : String.join("; ", reasons))
                 .build();
     }
