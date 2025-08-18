@@ -5,9 +5,7 @@ import likelion.traditional_market.Reward.Service.RewardService;
 import com.google.zxing.WriterException;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -23,20 +21,15 @@ public class RewardController {
     private final RewardService rewardService;
 
     @GetMapping
-    public ResponseEntity<?> getRewardQrCode(HttpSession session) {
+    public ResponseEntity<ApiResponse<String>> getRewardQrCode(HttpSession session) {
         String userKey = (String) session.getAttribute("userKey");
         if (userKey == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error(401, "userKey가 없습니다."));
         }
 
         try {
-            byte[] qrCodeImage = rewardService.generateRewardQrCode(userKey);
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.IMAGE_PNG);
-            headers.setContentLength(qrCodeImage.length);
-
-            return new ResponseEntity<>(qrCodeImage, headers, HttpStatus.OK);
+            String qrCodeBase64 = rewardService.generateRewardQrCode(userKey);
+            return ResponseEntity.ok(ApiResponse.success("QR 코드 생성 성공", qrCodeBase64));
         } catch (IllegalStateException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.error(400, e.getMessage()));
         } catch (IOException | WriterException e) {

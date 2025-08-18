@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,7 +37,7 @@ public class RewardService {
     private final MissionRepository missionRepository;
 
     @Transactional(readOnly = true)
-    public byte[] generateRewardQrCode(String userKey) throws WriterException, IOException {
+    public String generateRewardQrCode(String userKey) throws WriterException, IOException {
         User user = userRepository.findById(userKey)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with key: " + userKey));
 
@@ -97,6 +98,8 @@ public class RewardService {
         // QR 코드 이미지를 byte 배열로 변환
         ByteArrayOutputStream pngOutputStream = new ByteArrayOutputStream();
         MatrixToImageWriter.writeToStream(bitMatrix, "PNG", pngOutputStream);
-        return pngOutputStream.toByteArray();
+        byte[] qrCodeImage = pngOutputStream.toByteArray();
+
+        return Base64.getEncoder().encodeToString(qrCodeImage);
     }
 }
