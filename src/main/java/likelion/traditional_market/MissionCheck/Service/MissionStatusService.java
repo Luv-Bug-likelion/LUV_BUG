@@ -3,9 +3,8 @@ package likelion.traditional_market.MissionCheck.Service;
 import likelion.traditional_market.CreateMission.Entity.Mission;
 import likelion.traditional_market.CreateMission.Entity.Story;
 import likelion.traditional_market.CreateMission.Entity.UserMission;
-import likelion.traditional_market.CreateMission.Reposiitory.MissionRepository;
-import likelion.traditional_market.CreateMission.Reposiitory.StoryRepository;
-import likelion.traditional_market.CreateMission.Reposiitory.UserMissionRepository;
+import likelion.traditional_market.CreateMission.Repository.MissionRepository;
+import likelion.traditional_market.CreateMission.Repository.UserMissionRepository;
 import likelion.traditional_market.MissionCheck.Dto.MissionCheckResponse;
 import likelion.traditional_market.UserKeyIssue.Entity.User;
 import likelion.traditional_market.UserKeyIssue.Repository.UserRepository;
@@ -17,7 +16,7 @@ import java.util.*;
 @RequiredArgsConstructor
 public class MissionStatusService {
     private final UserRepository userRepository;
-    private final StoryRepository storyRepository;
+    private final likelion.traditional_market.CreateMission.Repository.StoryRepository storyRepository;
     private final UserMissionRepository userMissionRepository;
     private final MissionRepository missionRepository;
 

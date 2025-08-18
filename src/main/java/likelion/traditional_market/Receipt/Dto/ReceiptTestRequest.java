@@ -1,15 +1,15 @@
 package likelion.traditional_market.Receipt.Dto;
 
-import lombok.Builder;
 import lombok.Data;
-import org.springframework.format.annotation.DateTimeFormat;
-
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
-@Builder
-public class ExtractedFields {
+public class ReceiptTestRequest {
+    private String userKey;
+    private int missionId;
     private String merchantName;
     private LocalDate visitDate;
     private Integer spentAmount;
+    private List<String> keywordHits;
 }

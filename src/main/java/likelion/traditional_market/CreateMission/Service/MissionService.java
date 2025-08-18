@@ -66,6 +66,9 @@ public class MissionService {
             newMissionTitle = chatGptMissionTitle;
         }
 
+        user.setMissionTitle(newMissionTitle);
+        userRepository.save(user);
+
         List<MissionDetailDto> processedMissionDetails = chatGptResponse.getMissionList().stream()
                 .map(dto -> {
                     String detail = dto.getMissionDetail();
@@ -160,11 +163,9 @@ public class MissionService {
                         .build())
                 .collect(Collectors.toList());
 
-        // 기존 스토리 제목을 그대로 사용
-        String missionTitle = story.getTitle();
-
         MissionStatusResponse response = MissionStatusResponse.builder()
-                .missionTitle(missionTitle)
+                .storyId(user.getStoryId())
+                .missionTitle(user.getMissionTitle()) // User 엔티티에서 저장된 제목을 가져옴
                 .missionList(missionDetails)
                 .totalSpent(user.getTotalSpent())
                 .missionCompleteCount(user.getMissionCompleteCount())
