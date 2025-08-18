@@ -9,4 +9,5 @@ public class MissionRewardDto {
     private int missionId;
     private String missionDetail;
     private int spentAmount;
+    private String receiptImgUrl;
 }

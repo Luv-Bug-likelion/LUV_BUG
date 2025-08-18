@@ -58,15 +58,20 @@ public class RewardService {
         // QR 코드에 담을 미션 상세 정보 DTO 리스트 생성
         List<MissionRewardDto> missionDataList = missions.stream()
                 .map(mission -> {
-                    int spentAmount = userMissions.stream()
+                    // 해당 미션에 대한 UserMission 엔티티를 찾아 영수증 URL과 지출 금액 가져옴
+                    UserMission userMission = userMissions.stream()
                             .filter(um -> um.getMissionId() == mission.getMissionId())
                             .findFirst()
-                            .map(UserMission::getSpentAmount)
-                            .orElse(0);
+                            .orElse(null);
+
+                    int spentAmount = (userMission != null) ? userMission.getSpentAmount() : 0;
+                    String receiptImgUrl = (userMission != null) ? userMission.getReceiptImgUrl() : null;
+
                     return MissionRewardDto.builder()
                             .missionId(mission.getMissionId())
                             .missionDetail(mission.getMissionDetail())
                             .spentAmount(spentAmount)
+                            .receiptImgUrl(receiptImgUrl)
                             .build();
                 })
                 .collect(Collectors.toList());
