@@ -8,6 +8,7 @@ import likelion.traditional_market.CreateMission.Entity.UserMission;
 import likelion.traditional_market.CreateMission.Repository.MissionRepository;
 import likelion.traditional_market.CreateMission.Repository.StoryRepository;
 import likelion.traditional_market.CreateMission.Repository.UserMissionRepository;
+import likelion.traditional_market.KakaoMap.dto.MarketStoresResponse;
 import likelion.traditional_market.KakaoMap.dto.StoreInfoDto;
 import likelion.traditional_market.KakaoMap.service.LocationService;
 import likelion.traditional_market.UserKeyIssue.Entity.User;
@@ -209,5 +210,35 @@ public class MissionService {
         }
 
         return "";
+    }
+    @Transactional(readOnly = true)
+    public ApiResponse<MarketStoresResponse> getMarketStoresForMissions(String userKey, String signPost) {
+        // 0) 유저 조회
+        User user = userRepository.findById(userKey)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with key: " + userKey));
+
+        // 1) 유저의 미션 목록 조회
+        List<UserMission> userMissions = userMissionRepository.findByUserKey(userKey);
+        List<Integer> missionIds = userMissions.stream()
+                .map(UserMission::getMissionId)
+                .toList();
+
+        List<Mission> missions = missionRepository.findAllById(missionIds);
+
+        // 2) 미션에서 키워드 추출(기존 extractKeyword 로직 재사용) + 중복 제거
+        List<String> keywords = missions.stream()
+                .map(m -> extractKeyword(m.getMissionDetail()))
+                .filter(k -> k != null && !k.isBlank())
+                .distinct()
+                .toList();
+
+        // 3) 시장명 결정: 유저 엔티티의 market 우선, 없으면 기본값
+        String marketName = (user.getMarket() != null && !user.getMarket().isBlank())
+                ? user.getMarket()
+                : "역곡남부시장";
+
+        // 4) 카카오맵 조회 → 프론트 mockData 구조로 포장
+        MarketStoresResponse data = locationService.getMarketStores(marketName, signPost, keywords);
+        return ApiResponse.success("상점 목록 조회 성공", data);
     }
 }

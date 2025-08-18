@@ -13,4 +13,5 @@ public class StoreInfoDto {
     private String phoneNumber;
     private String x;
     private String y;
+    private String industry;
 }

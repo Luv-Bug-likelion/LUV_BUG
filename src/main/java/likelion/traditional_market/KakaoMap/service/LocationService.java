@@ -1,6 +1,7 @@
 package likelion.traditional_market.KakaoMap.service;
 
 import likelion.traditional_market.CreateMission.Service.ChatGptService;
+import likelion.traditional_market.KakaoMap.dto.MarketStoresResponse;
 import likelion.traditional_market.KakaoMap.dto.StoreInfoDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,12 +22,16 @@ public class LocationService {
 
     private final ChatGptService chatGptService;
 
-    public Map<String, List<StoreInfoDto>> searchStores(List<String> keywords, String market) {
-        WebClient webClient = WebClient.builder()
+    private WebClient kakaoClient() {
+        return WebClient.builder()
                 .baseUrl("https://dapi.kakao.com/v2/local")
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "KakaoAK " + kakaoApiKey)
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                 .build();
+    }
+
+    public Map<String, List<StoreInfoDto>> searchStores(List<String> keywords, String market) {
+        WebClient webClient = kakaoClient();
 
         // 시장 좌표 추출
         Optional<Map<String, Object>> marketLocation = getMarketCoordinates(webClient, market);
@@ -53,6 +58,93 @@ public class LocationService {
                 }
         ));
     }
+    
+    //프론트Mock데이터 구조로 포장
+    public MarketStoresResponse getMarketStores(String marketName, String signPost, List<String> keywords) {
+        WebClient webClient = kakaoClient();
+
+        // 시장 좌표
+        Optional<Map<String, Object>> marketLocation = getMarketCoordinates(webClient, marketName);
+        if (marketLocation.isEmpty()) {
+            return MarketStoresResponse.builder()
+                    .marketName(marketName)
+                    .signPost(signPost)
+                    .meat(List.of())
+                    .fish(List.of())
+                    .vegetable(List.of())
+                    .fruit(List.of())
+                    .build();
+        }
+        String marketX = (String) marketLocation.get().get("x");
+        String marketY = (String) marketLocation.get().get("y");
+
+        // 버킷 (중복 제거 위해 Set 사용 권장)
+        Set<StoreInfoDto> meat = new HashSet<>();
+        Set<StoreInfoDto> fish = new HashSet<>();
+        Set<StoreInfoDto> vegetable = new HashSet<>();
+        Set<StoreInfoDto> fruit = new HashSet<>();
+
+        // 기존 “카테고리 매핑 로직” 그대로 활용
+        for (String keyword : Optional.ofNullable(keywords).orElseGet(List::of)) {
+            List<String> categories = mapKeywordToCategory(keyword); // ← 기존 메서드 그대로 사용
+            for (String category : categories) {
+                Bucket bucket = toBucket(category);     // ↓ 헬퍼
+                if (bucket == Bucket.NONE) continue;
+
+                List<StoreInfoDto> found = searchStoresByKeyword(webClient, category, marketX, marketY); // ← 기존 메서드 그대로 사용
+                String label = industryLabel(bucket);   // ↓ 헬퍼
+
+                for (StoreInfoDto s : found) {
+                    StoreInfoDto copy = new StoreInfoDto();
+                    copy.setName(s.getName());
+                    copy.setAddress(s.getAddress());
+                    copy.setPhoneNumber(s.getPhoneNumber());
+                    copy.setX(s.getX());
+                    copy.setY(s.getY());
+                    copy.setIndustry(label); // 업종 라벨 통일
+                    switch (bucket) {
+                        case MEAT      -> meat.add(copy);
+                        case FISH      -> fish.add(copy);
+                        case VEGETABLE -> vegetable.add(copy);
+                        case FRUIT     -> fruit.add(copy);
+                        default -> {}
+                    }
+                }
+            }
+        }
+
+        return MarketStoresResponse.builder()
+                .marketName(marketName)
+                .signPost(signPost)
+                .meat(new ArrayList<>(meat))
+                .fish(new ArrayList<>(fish))
+                .vegetable(new ArrayList<>(vegetable))
+                .fruit(new ArrayList<>(fruit))
+                .build();
+    }
+
+    private enum Bucket { MEAT, FISH, VEGETABLE, FRUIT, NONE }
+
+    private Bucket toBucket(String category) {
+        return switch (category) {
+            case "축산", "정육점" -> Bucket.MEAT;
+            case "수산물"        -> Bucket.FISH;
+            case "농산물", "야채" -> Bucket.VEGETABLE;
+            case "과일"          -> Bucket.FRUIT;
+            default              -> Bucket.NONE; // "식품" 등은 프론트 버킷 제외
+        };
+    }
+
+    private String industryLabel(Bucket b) {
+        return switch (b) {
+            case MEAT      -> "정육점";
+            case FISH      -> "수산물 가게";
+            case VEGETABLE -> "채소 가게";
+            case FRUIT     -> "과일 가게";
+            default        -> "";
+        };
+    }
+
 
     private List<String> mapKeywordToCategory(String keyword) {
         List<String> categories = switch (keyword) {
