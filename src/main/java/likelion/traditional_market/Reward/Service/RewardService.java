@@ -6,7 +6,6 @@ import com.google.zxing.MultiFormatWriter;
 import com.google.zxing.WriterException;
 import com.google.zxing.client.j2se.MatrixToImageWriter;
 import com.google.zxing.common.BitMatrix;
-import com.google.zxing.EncodeHintType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import likelion.traditional_market.CreateMission.Entity.Mission;
 import likelion.traditional_market.CreateMission.Entity.UserMission;
@@ -14,7 +13,7 @@ import likelion.traditional_market.CreateMission.Repository.MissionRepository;
 import likelion.traditional_market.CreateMission.Repository.UserMissionRepository;
 import likelion.traditional_market.Reward.Dto.MissionRewardDto;
 import likelion.traditional_market.Reward.Dto.RewardDataDto;
-import likelion.traditional_market.Reward.Entity.RewardToken;
+import likelion.traditional_market.Reward.Entity.RewardTokens;
 import likelion.traditional_market.Reward.Repository.RewardTokenRepository;
 import likelion.traditional_market.UserKeyIssue.Entity.User;
 import likelion.traditional_market.UserKeyIssue.Repository.UserRepository;
@@ -36,10 +35,16 @@ public class RewardService {
     private final MissionRepository missionRepository;
     private final RewardTokenRepository rewardTokenRepository;
 
-    @Transactional(readOnly = true)
+    @Transactional
     public String generateRewardQrCode(String userKey) throws WriterException, IOException {
         User user = userRepository.findById(userKey)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with key: " + userKey));
+
+        // 발급받은 사용자 검증
+        if (rewardTokenRepository.existsByUserKey(userKey)) {
+            throw new IllegalStateException("이미 리워드 QR 코드를 발급받았습니다. 하나의 계정으로 한 번만 발급할 수 있습니다.");
+        }
+
 
         // 미션 완료 횟수가 3회 미만일 경우 예외 발생
         if (user.getMissionCompleteCount() < 3) {
@@ -48,7 +53,7 @@ public class RewardService {
 
         // 고유 토큰 생성 및 DB 저장
         String rewardToken = UUID.randomUUID().toString();
-        rewardTokenRepository.save(new RewardToken(rewardToken, userKey));
+        rewardTokenRepository.save(new RewardTokens(rewardToken, userKey));
 
         // 사용자의 모든 미션 정보 조회
         List<UserMission> userMissions = userMissionRepository.findByUserKey(userKey);

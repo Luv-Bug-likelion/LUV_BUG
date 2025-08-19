@@ -38,7 +38,7 @@ public class RewardController {
         }
     }
 
-    @PostMapping
+    @PostMapping("/claim")
     public ResponseEntity<ApiResponse<String>> claimReward(@RequestBody RewardClaimRequest request) {
         if (rewardClaimService.claimReward(request.getUserKey(), request.getToken())) {
             return ResponseEntity.ok(ApiResponse.success("보상이 성공적으로 지급되었습니다.", null));

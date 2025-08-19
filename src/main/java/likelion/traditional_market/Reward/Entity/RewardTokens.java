@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 @Getter
 @Setter
 @NoArgsConstructor
-public class RewardToken {
+public class RewardTokens {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -31,7 +31,7 @@ public class RewardToken {
         UNUSED, USED
     }
 
-    public RewardToken(String token, String userKey) {
+    public RewardTokens(String token, String userKey) {
         this.token = token;
         this.userKey = userKey;
         this.status = RewardStatus.UNUSED;
