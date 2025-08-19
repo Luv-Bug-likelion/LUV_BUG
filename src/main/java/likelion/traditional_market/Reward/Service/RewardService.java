@@ -14,6 +14,8 @@ import likelion.traditional_market.CreateMission.Repository.MissionRepository;
 import likelion.traditional_market.CreateMission.Repository.UserMissionRepository;
 import likelion.traditional_market.Reward.Dto.MissionRewardDto;
 import likelion.traditional_market.Reward.Dto.RewardDataDto;
+import likelion.traditional_market.Reward.Entity.RewardToken;
+import likelion.traditional_market.Reward.Repository.RewardTokenRepository;
 import likelion.traditional_market.UserKeyIssue.Entity.User;
 import likelion.traditional_market.UserKeyIssue.Repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -22,10 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.util.Base64;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -35,6 +34,7 @@ public class RewardService {
     private final UserRepository userRepository;
     private final UserMissionRepository userMissionRepository;
     private final MissionRepository missionRepository;
+    private final RewardTokenRepository rewardTokenRepository;
 
     @Transactional(readOnly = true)
     public String generateRewardQrCode(String userKey) throws WriterException, IOException {
@@ -45,6 +45,10 @@ public class RewardService {
         if (user.getMissionCompleteCount() < 3) {
             throw new IllegalStateException("미션 완료 횟수가 3회 미만입니다. 현재: " + user.getMissionCompleteCount() + "회");
         }
+
+        // 고유 토큰 생성 및 DB 저장
+        String rewardToken = UUID.randomUUID().toString();
+        rewardTokenRepository.save(new RewardToken(rewardToken, userKey));
 
         // 사용자의 모든 미션 정보 조회
         List<UserMission> userMissions = userMissionRepository.findByUserKey(userKey);
@@ -82,6 +86,7 @@ public class RewardService {
                 .market(user.getMarket())
                 .totalSpent(user.getTotalSpent())
                 .missionCompleteCount(user.getMissionCompleteCount())
+                .rewardToken(rewardToken)
                 .missions(missionDataList)
                 .build();
 
