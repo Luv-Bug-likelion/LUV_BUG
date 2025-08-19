@@ -205,8 +205,35 @@ public class LocationService {
                     store.setPhoneNumber((String) doc.get("phone"));
                     store.setX((String) doc.get("x"));
                     store.setY((String) doc.get("y"));
+                    Optional<Map<String,String>> subwayInfo = findSubway(store.getX(), store.getY());
+                    subwayInfo.ifPresent(info->{
+                            store.setSubwayName(info.get("name"));
+                            store.setSubwayDistance(info.get("distance")+"m");
+                });
                     return store;
                 })
                 .collect(Collectors.toList());
+    }
+    public Optional<Map<String,String>> findSubway(String x, String y){
+        Map<String,Object> response = kakaoClient().get()
+                .uri(uriBuilder -> uriBuilder
+                .path("/search/category.json")
+                .queryParam("category_group_code","SW8")
+                .queryParam("x",x)
+                .queryParam("y",y)
+                .queryParam("radius",1000)
+                .queryParam("sort","distance")
+                .build())
+                .retrieve()
+                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                .block();
+        List<Map<String,Object>> documents  = (List<Map<String, Object>>) response.get("documents");
+        if(documents.isEmpty()){
+            return Optional.empty();
+        }
+        Map<String,String> result = new HashMap<>();
+        result.put("name",(String)documents.get(0).get("place_name"));
+        result.put("distance",(String)documents.get(0).get("distance"));
+        return Optional.of(result);
     }
 }
