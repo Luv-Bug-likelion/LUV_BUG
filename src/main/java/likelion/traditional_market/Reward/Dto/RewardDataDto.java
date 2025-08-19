@@ -12,5 +12,6 @@ public class RewardDataDto {
     private String market;
     private int totalSpent;
     private int missionCompleteCount;
+    private String rewardToken;
     private List<MissionRewardDto> missions;
 }
