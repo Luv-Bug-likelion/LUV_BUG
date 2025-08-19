@@ -28,7 +28,7 @@ public class ChatGptService {
                 .build();
 
         Map<String, Object> requetBody = Map.of(
-                "model", "gpt-5",
+                "model", "gpt-4o",
                 "messages", List.of(
                         Map.of("role", "system", "content", "You are a helpful assistant that only responds in JSON format."),
                         Map.of("role", "user", "content", prompt)
@@ -41,14 +41,15 @@ public class ChatGptService {
                 .bodyToMono(Map.class)
                 .block();
 
-        // API 응답에서 content 추출
         Map<String, Object> choice = ((List<Map<String, Object>>) apiResponse.get("choices")).get(0);
         String content = (String) ((Map<String, Object>) choice.get("message")).get("content");
 
-        // Jackson ObjectMapper를 사용하여 JSON 문자열을 DTO로 변환
+        // GPT-4o 응답에서 불필요한 백틱과 'json' 키워드 제거
+        String cleanedContent = content.replaceAll("```json|```", "").trim();
+
         ObjectMapper objectMapper = new ObjectMapper();
         try {
-            MissionStatusResponse response = objectMapper.readValue(content, MissionStatusResponse.class);
+            MissionStatusResponse response = objectMapper.readValue(cleanedContent, MissionStatusResponse.class);
             return ApiResponse.success("ChatGPT 응답 성공", response);
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse ChatGPT response", e);
@@ -57,7 +58,7 @@ public class ChatGptService {
 
     private String buildPrompt(int storyId, int budget) {
         return String.format(
-                "스토리 ID %d와 예산 %d원을 활용하여, 시장에서 구입할 간단한 음식 재료 미션 5개 이상을 생성해줘. JSON은 'missionTitle', 'missionList' 키를 포함해야 해. 'missionList'의 각 항목은 'missionDetail', 'expectedPrice', 'is_success' 키를 반드시 포함해야 해. 'missionTitle'은 음식 이름으로 작성하고, 'missionDetail'은 '~을 구매한다' 형식으로 작성해줘. 'is_success' 값은 false로 고정해줘. 응답은 오직 JSON 형식으로만 제공해줘.",
+                "스토리 ID %d와 예산 %d원을 활용하여, 시장에서 구입할 음식 재료 미션 5개 이상 12개 미만으로 생성해줘. JSON은 'missionTitle', 'missionList' 키를 포함해야 해. 'missionList'의 각 항목은 'missionDetail', 'expectedPrice', 'is_success' 키를 반드시 포함해야 해. 'missionTitle'은 음식 이름으로만 작성하고, 'missionDetail'은 '~을 구매한다' 형식으로 작성해줘. 'is_success' 값은 false로 고정해줘. 응답은 오직 JSON 형식으로만 제공해줘.",
                 storyId,
                 budget
         );
@@ -76,7 +77,7 @@ public class ChatGptService {
         );
 
         Map<String, Object> requetBody = Map.of(
-                "model", "gpt-5",
+                "model", "gpt-4o",
                 "messages", List.of(
                         Map.of("role", "system", "content", "You are a helpful assistant that only provides the category name."),
                         Map.of("role", "user", "content", prompt)
@@ -92,6 +93,7 @@ public class ChatGptService {
         Map<String, Object> choice = ((List<Map<String, Object>>) apiResponse.get("choices")).get(0);
         String content = (String) ((Map<String, Object>) choice.get("message")).get("content");
 
-        return content;
+        // GPT-4o 응답에서 불필요한 백틱 제거
+        return content.replaceAll("```", "").trim();
     }
 }
