@@ -39,6 +39,7 @@ out/
 # 환경 변수 파일 (로컬에서 사용 시)
 .env
 *.properties
+/src/main/resources/application.properties
 
 # 운영체제 관련 파일
 .DS_Store
