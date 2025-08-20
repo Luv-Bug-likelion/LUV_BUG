@@ -1,25 +1,42 @@
 package likelion.traditional_market.Receipt.Service;
 
+import io.netty.channel.ChannelOption;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
+import reactor.netty.http.client.HttpClient;
 
+import java.time.Duration;
 import java.util.Base64;
 import java.util.Map;
 import java.util.*;
 
 @Component
 public class ClovaOcrClient {
-    private final WebClient webClient = WebClient.builder().build();
+    private final WebClient webClient;
+    private final String invokeUrl;
+    private final String secretKey;
+    private final boolean mock;
 
-    @Value("${naver.clova.ocr.url}")
-    private String invokeUrl;
-    @Value("${naver.clova.ocr.secret}")
-    private String secretKey;
-    @Value("${naver.clova.ocr.mock}")
-    private boolean mock;
+    public ClovaOcrClient(@Value("${naver.clova.ocr.url}")String invokeUrl,
+                          @Value("${naver.clova.ocr.secret}") String secretKey,
+                          @Value("${naver.clova.ocr.mock}") boolean mock)
+    {
+        this.invokeUrl = invokeUrl;
+        this.secretKey = secretKey;
+        this.mock = mock;
+        HttpClient httpClient = HttpClient.create()
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000)
+                .responseTimeout(Duration.ofSeconds(10));
+        this.webClient = WebClient.builder()
+                .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .baseUrl(invokeUrl)
+                .build();
+
+    }
 
     public String recognize(String filename, byte[] img) {
 //        if (mock) {
