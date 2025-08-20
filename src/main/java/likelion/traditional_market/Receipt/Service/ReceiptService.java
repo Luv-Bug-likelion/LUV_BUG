@@ -26,7 +26,7 @@ public class ReceiptService {
     private static final ZoneId ZONE_SEOUL = ZoneId.of("Asia/Seoul");
     private final UserMissionRepository userMissionRepository;
     private final UserRepository userRepository;
-
+    @Transactional
     public ReceiptCheckResponse handleReceiptCheck(MultipartFile image, String userKey, Integer missionId) {
         try {
             if (image == null || image.isEmpty()) {
