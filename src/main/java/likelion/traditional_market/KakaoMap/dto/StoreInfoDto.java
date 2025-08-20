@@ -14,6 +14,6 @@ public class StoreInfoDto {
     private String x;
     private String y;
     private String industry;
-    private String SubwayName;
-    private String SubwayDistance;
+    private String subwayName;
+    private String subwayDistance;
 }

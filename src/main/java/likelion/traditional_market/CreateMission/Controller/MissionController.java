@@ -43,20 +43,4 @@ public class MissionController {
         ApiResponse<Map<String, List<StoreInfoDto>>> storeInfoMap = missionService.getStoresForMissions(userKey);
         return ResponseEntity.ok(storeInfoMap);
     }
-    @GetMapping("/stores/v2")
-    public ResponseEntity<ApiResponse<MarketStoresResponse>> getStoresV2(
-            HttpSession session,
-            @RequestParam(defaultValue = "") String signPost
-    ) {
-        String userKey = (String) session.getAttribute("userKey");
-        if (userKey == null) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(400, "userKey가 없습니다."));
-        }
-        // 내부에서 MissionService가 userKey 기반으로
-        // - 시장명(marketName)
-        // - 키워드 리스트(keywords)
-        // 를 뽑아 LocationService.getMarketStores(...) 호출하도록 구현
-        ApiResponse<MarketStoresResponse> resp = missionService.getMarketStoresForMissions(userKey, signPost);
-        return ResponseEntity.ok(resp);
-    }
 }
