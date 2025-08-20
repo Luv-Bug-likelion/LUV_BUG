@@ -9,6 +9,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
+import reactor.core.publisher.Flux;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -21,100 +23,141 @@ public class LocationService {
 
     private final ChatGptService chatGptService;
 
-    public Map<String, List<StoreInfoDto>> searchStores(List<String> keywords, String market) {
-        WebClient webClient = WebClient.builder()
+    private WebClient kakaoClient() {
+        return WebClient.builder()
                 .baseUrl("https://dapi.kakao.com/v2/local")
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "KakaoAK " + kakaoApiKey)
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                 .build();
-
-        // 시장 좌표 추출
-        Optional<Map<String, Object>> marketLocation = getMarketCoordinates(webClient, market);
-        if (marketLocation.isEmpty()) {
-            return keywords.stream().collect(Collectors.toMap(
-                    keyword -> keyword,
-                    keyword -> List.of(),
-                    (existing, replacement) -> existing // 중복 키가 발생해도 기존 값을 유지
-            ));
-        }
-        String marketX = (String) marketLocation.get().get("x");
-        String marketY = (String) marketLocation.get().get("y");
-
-        // 키워드별 상점 검색
-        return keywords.stream().collect(Collectors.toMap(
-                keyword -> keyword,
-                keyword -> {
-                    List<String> searchCategories = mapKeywordToCategory(keyword);
-                    Set<StoreInfoDto> uniqueStores = new HashSet<>();
-                    for (String category : searchCategories) {
-                        uniqueStores.addAll(searchStoresByKeyword(webClient, category, marketX, marketY));
-                    }
-                    return new ArrayList<>(uniqueStores);
-                }
-        ));
     }
 
-    private List<String> mapKeywordToCategory(String keyword) {
-        List<String> categories = switch (keyword) {
-            case "돼지고기", "소고기" -> List.of("축산", "정육점");
-            case "오징어", "새우", "고등어", "명태" -> List.of("수산물");
-            case "양파", "대파", "무", "배추" -> List.of("농산물", "야채");
-            case "사과", "배" -> List.of("과일");
-            case "김치", "두부" -> List.of("식품");
-            default -> {
-                // GPT로 분류한 키워드를 사용
-                String gptCategory = chatGptService.classifyKeyword(keyword);
-                yield switch (gptCategory) {
-                    case "축산" -> List.of("축산", "정육점");
-                    case "수산물" -> List.of("수산물");
-                    case "농산물" -> List.of("농산물", "야채");
-                    case "과일" -> List.of("과일");
-                    case "식품" -> List.of("식품");
-                    default -> List.of(keyword);
-                };
-            }
-        };
-        return categories;
-    }
-
-    private Optional<Map<String, Object>> getMarketCoordinates(WebClient webClient, String marketName) {
-        Map<String, Object> response = webClient.get()
+    // getMarketCoordinates 메서드를 Mono를 반환하도록 수정
+    private Mono<Optional<Map<String, Object>>> getMarketCoordinatesAsync(WebClient webClient, String marketName) {
+        return webClient.get()
                 .uri(uriBuilder -> uriBuilder
                         .path("/search/keyword.json")
                         .queryParam("query", marketName)
                         .build())
                 .retrieve()
                 .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
-                .block();
-
-        List<Map<String, Object>> documents = (List<Map<String, Object>>) response.get("documents");
-        return documents.stream().findFirst();
+                .map(response -> {
+                    List<Map<String, Object>> documents = (List<Map<String, Object>>) response.get("documents");
+                    return documents.stream().findFirst();
+                });
     }
 
-    private List<StoreInfoDto> searchStoresByKeyword(WebClient webClient, String keyword, String x, String y) {
-        Map<String, Object> response = webClient.get()
+    // findSubway 메서드
+    public Mono<Map<String,String>> findSubwayAsync(String x, String y){
+        return kakaoClient().get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/search/category.json")
+                        .queryParam("category_group_code","SW8")
+                        .queryParam("x",x)
+                        .queryParam("y",y)
+                        .queryParam("radius",1000)
+                        .queryParam("sort","distance")
+                        .build())
+                .retrieve()
+                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                .map(response -> {
+                    List<Map<String,Object>> documents  = (List<Map<String, Object>>) response.get("documents");
+                    if(documents.isEmpty()){
+                        return Map.of();
+                    }
+                    Map<String,String> result = new HashMap<>();
+                    result.put("name",(String)documents.get(0).get("place_name"));
+                    result.put("distance",(String)documents.get(0).get("distance"));
+                    return result;
+                });
+    }
+
+    // getAllStoresByMarketAndCategorize 메서드가 Mono를 반환하도록 수정
+    public Mono<Map<String, List<StoreInfoDto>>> getAllStoresByMarketAndCategorizeAsync(String marketName, int radius) {
+        WebClient webClient = kakaoClient();
+
+        List<String> keywords = List.of("시장", "마트", "정육점", "수산물", "농산물", "반찬", "식료품", "식당", "분식");
+
+        return getMarketCoordinatesAsync(webClient, marketName)
+                .flatMap(marketLocationOpt -> {
+                    if (marketLocationOpt.isEmpty()) {
+                        return Mono.just(Map.of("전체", List.of(), "육류", List.of(), "수산물", List.of(), "채소", List.of(), "반찬", List.of()));
+                    }
+
+                    String marketX = (String) marketLocationOpt.get().get("x");
+                    String marketY = (String) marketLocationOpt.get().get("y");
+
+                    List<Mono<List<StoreInfoDto>>> storeMonos = keywords.stream()
+                            .map(keyword -> searchStoresByKeywordAsync(webClient, keyword, marketX, marketY, radius))
+                            .collect(Collectors.toList());
+
+                    return Mono.zip(storeMonos, (Object[] results) ->
+                                    Arrays.stream(results)
+                                            .map(result -> (List<StoreInfoDto>) result)
+                                            .collect(Collectors.toList())
+                            )
+                            .map(allStoresList -> allStoresList.stream()
+                                    .flatMap(List::stream)
+                                    .collect(Collectors.toSet()))
+                            .flatMap(allStores ->
+                                    chatGptService.classifyKeywordsAsync(new ArrayList<>(allStores))
+                                            .map(categoryMap -> {
+                                                Map<String, List<StoreInfoDto>> categorizedStores = new HashMap<>();
+                                                categorizedStores.put("육류", new ArrayList<>());
+                                                categorizedStores.put("수산물", new ArrayList<>());
+                                                categorizedStores.put("채소", new ArrayList<>());
+                                                categorizedStores.put("반찬", new ArrayList<>());
+                                                categorizedStores.put("기타", new ArrayList<>());
+
+                                                for (StoreInfoDto store : allStores) {
+                                                    String category = categoryMap.getOrDefault(store.getName(), "기타");
+                                                    switch (category) {
+                                                        case "육류" -> categorizedStores.get("육류").add(store);
+                                                        case "수산물" -> categorizedStores.get("수산물").add(store);
+                                                        case "채소" -> categorizedStores.get("채소").add(store);
+                                                        case "반찬" -> categorizedStores.get("반찬").add(store);
+                                                        default -> categorizedStores.get("기타").add(store);
+                                                    }
+                                                }
+                                                categorizedStores.remove("기타");
+                                                return categorizedStores;
+                                            })
+                            );
+                });
+    }
+
+    private Mono<List<StoreInfoDto>> searchStoresByKeywordAsync(WebClient webClient, String keyword, String x, String y, int radius) {
+        return webClient.get()
                 .uri(uriBuilder -> uriBuilder
                         .path("/search/keyword.json")
                         .queryParam("query", keyword)
                         .queryParam("x", x)
                         .queryParam("y", y)
-                        .queryParam("radius", 300) // 300m 반경 내 검색
+                        .queryParam("radius", radius)
                         .build())
                 .retrieve()
                 .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
-                .block();
-
-        List<Map<String, Object>> documents = (List<Map<String, Object>>) response.get("documents");
-        return documents.stream()
-                .map(doc -> {
+                .flatMapMany(response -> {
+                    List<Map<String, Object>> documents = (List<Map<String, Object>>) response.get("documents");
+                    return Flux.fromIterable(documents);
+                })
+                .flatMap(doc -> {
                     StoreInfoDto store = new StoreInfoDto();
                     store.setName((String) doc.get("place_name"));
                     store.setAddress((String) doc.get("address_name"));
                     store.setPhoneNumber((String) doc.get("phone"));
                     store.setX((String) doc.get("x"));
                     store.setY((String) doc.get("y"));
-                    return store;
+                    store.setIndustry((String) doc.get("category_name"));
+
+                    return findSubwayAsync(store.getX(), store.getY())
+                            .map(subwayInfo -> {
+                                if (!subwayInfo.isEmpty()) {
+                                    store.setSubwayName(subwayInfo.get("name"));
+                                    store.setSubwayDistance(subwayInfo.get("distance")+"m");
+                                }
+                                return store;
+                            });
                 })
-                .collect(Collectors.toList());
+                .collectList();
     }
 }

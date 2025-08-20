@@ -32,13 +32,13 @@ public class MissionController {
     }
 
     @GetMapping("/stores")
-    public ResponseEntity<ApiResponse<Map<String, List<StoreInfoDto>>>> getStores(HttpSession session) {
+    public ResponseEntity<ApiResponse<List<StoreInfoDto>>> getStores(HttpSession session) {
         String userKey = (String) session.getAttribute("userKey");
         if (userKey == null) {
             return ResponseEntity.badRequest().body(ApiResponse.error(400, "userKey가 없습니다."));
         }
 
-        ApiResponse<Map<String, List<StoreInfoDto>>> storeInfoMap = missionService.getStoresForMissions(userKey);
-        return ResponseEntity.ok(storeInfoMap);
+        ApiResponse<List<StoreInfoDto>> response = missionService.getAllCategorizedStores(userKey);
+        return ResponseEntity.ok(response);
     }
 }

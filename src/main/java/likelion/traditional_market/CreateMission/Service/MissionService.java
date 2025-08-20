@@ -165,32 +165,13 @@ public class MissionService {
 
         MissionStatusResponse response = MissionStatusResponse.builder()
                 .storyId(user.getStoryId())
-                .missionTitle(user.getMissionTitle()) // User 엔티티에서 저장된 제목을 가져옴
+                .missionTitle(user.getMissionTitle())
                 .missionList(missionDetails)
                 .totalSpent(user.getTotalSpent())
                 .missionCompleteCount(user.getMissionCompleteCount())
                 .build();
 
         return ApiResponse.success("기존 미션 목록 조회 성공", response);
-    }
-
-    @Transactional(readOnly = true)
-    public ApiResponse<Map<String, List<StoreInfoDto>>> getStoresForMissions(String userKey) {
-        User user = userRepository.findById(userKey)
-                .orElseThrow(() -> new IllegalArgumentException("User not found with key: " + userKey));
-
-        List<UserMission> userMissions = userMissionRepository.findByUserKey(userKey);
-        List<Integer> missionIds = userMissions.stream().map(UserMission::getMissionId).collect(Collectors.toList());
-        List<Mission> missions = missionRepository.findAllById(missionIds);
-
-        List<String> keywords = missions.stream()
-                .map(mission -> extractKeyword(mission.getMissionDetail()))
-                .filter(keyword -> !keyword.isEmpty())
-                .distinct()
-                .collect(Collectors.toList());
-
-        Map<String, List<StoreInfoDto>> storeInfoMap = locationService.searchStores(keywords, user.getMarket());
-        return ApiResponse.success("상점 목록 조회 성공", storeInfoMap);
     }
 
     private String extractKeyword(String missionDetail) {
@@ -209,5 +190,29 @@ public class MissionService {
         }
 
         return "";
+    }
+
+    // MissionService.java
+    @Transactional(readOnly = true)
+    public ApiResponse<List<StoreInfoDto>> getAllCategorizedStores(String userKey) {
+        User user = userRepository.findById(userKey)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with key: " + userKey));
+
+        String marketName = (user.getMarket() != null && !user.getMarket().isBlank())
+                ? user.getMarket()
+                : "역곡남부시장";
+
+        // 비동기 메서드를 호출하고, 최종적으로 블로킹하여 결과를 반환
+        Map<String, List<StoreInfoDto>> storesByCategory = locationService.getAllStoresByMarketAndCategorizeAsync(marketName, 300).block();
+
+        // "기타" 카테고리를 최종 응답에서 제외
+        storesByCategory.remove("기타");
+
+        List<StoreInfoDto> allCategorizedStores = storesByCategory.values().stream()
+                .flatMap(List::stream)
+                .distinct()
+                .collect(Collectors.toList());
+
+        return ApiResponse.success("상점 목록 조회 성공", allCategorizedStores);
     }
 }
