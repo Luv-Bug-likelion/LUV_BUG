@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
@@ -31,14 +32,15 @@ public class MissionController {
         return ResponseEntity.ok(response);
     }
 
+    // Mono<ApiResponse<...>>를 반환하도록 수정
     @GetMapping("/stores")
-    public ResponseEntity<ApiResponse<List<StoreInfoDto>>> getStores(HttpSession session) {
+    public Mono<ResponseEntity<ApiResponse<List<StoreInfoDto>>>> getStores(HttpSession session) {
         String userKey = (String) session.getAttribute("userKey");
         if (userKey == null) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(400, "userKey가 없습니다."));
+            return Mono.just(ResponseEntity.badRequest().body(ApiResponse.error(400, "userKey가 없습니다.")));
         }
 
-        ApiResponse<List<StoreInfoDto>> response = missionService.getAllCategorizedStores(userKey);
-        return ResponseEntity.ok(response);
+        return missionService.getAllCategorizedStores(userKey)
+                .map(ResponseEntity::ok);
     }
 }

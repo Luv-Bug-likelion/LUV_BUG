@@ -31,7 +31,6 @@ public class LocationService {
                 .build();
     }
 
-    // getMarketCoordinates 메서드를 Mono를 반환하도록 수정
     private Mono<Optional<Map<String, Object>>> getMarketCoordinatesAsync(WebClient webClient, String marketName) {
         return webClient.get()
                 .uri(uriBuilder -> uriBuilder
@@ -46,7 +45,6 @@ public class LocationService {
                 });
     }
 
-    // findSubway 메서드
     public Mono<Map<String,String>> findSubwayAsync(String x, String y){
         return kakaoClient().get()
                 .uri(uriBuilder -> uriBuilder
@@ -71,7 +69,6 @@ public class LocationService {
                 });
     }
 
-    // getAllStoresByMarketAndCategorize 메서드가 Mono를 반환하도록 수정
     public Mono<Map<String, List<StoreInfoDto>>> getAllStoresByMarketAndCategorizeAsync(String marketName, int radius) {
         WebClient webClient = kakaoClient();
 
@@ -98,30 +95,21 @@ public class LocationService {
                             .map(allStoresList -> allStoresList.stream()
                                     .flatMap(List::stream)
                                     .collect(Collectors.toSet()))
-                            .flatMap(allStores ->
-                                    chatGptService.classifyKeywordsAsync(new ArrayList<>(allStores))
-                                            .map(categoryMap -> {
-                                                Map<String, List<StoreInfoDto>> categorizedStores = new HashMap<>();
-                                                categorizedStores.put("육류", new ArrayList<>());
-                                                categorizedStores.put("수산물", new ArrayList<>());
-                                                categorizedStores.put("채소", new ArrayList<>());
-                                                categorizedStores.put("반찬", new ArrayList<>());
-                                                categorizedStores.put("기타", new ArrayList<>());
+                            .map(allStores -> {
+                                Map<String, List<StoreInfoDto>> categorizedStores = new HashMap<>();
+                                categorizedStores.put("육류", new ArrayList<>());
+                                categorizedStores.put("수산물", new ArrayList<>());
+                                categorizedStores.put("채소", new ArrayList<>());
+                                categorizedStores.put("반찬", new ArrayList<>());
 
-                                                for (StoreInfoDto store : allStores) {
-                                                    String category = categoryMap.getOrDefault(store.getName(), "기타");
-                                                    switch (category) {
-                                                        case "육류" -> categorizedStores.get("육류").add(store);
-                                                        case "수산물" -> categorizedStores.get("수산물").add(store);
-                                                        case "채소" -> categorizedStores.get("채소").add(store);
-                                                        case "반찬" -> categorizedStores.get("반찬").add(store);
-                                                        default -> categorizedStores.get("기타").add(store);
-                                                    }
-                                                }
-                                                categorizedStores.remove("기타");
-                                                return categorizedStores;
-                                            })
-                            );
+                                for (StoreInfoDto store : allStores) {
+                                    String category = classifyByStoreInfo(store);
+                                    if (categorizedStores.containsKey(category)) {
+                                        categorizedStores.get(category).add(store);
+                                    }
+                                }
+                                return categorizedStores;
+                            });
                 });
     }
 
@@ -159,5 +147,25 @@ public class LocationService {
                             });
                 })
                 .collectList();
+    }
+
+    // StoreInfoDto 객체를 받아 상점 이름과 업종 정보를 모두 활용하도록 수정
+    private String classifyByStoreInfo(StoreInfoDto store) {
+        String name = store.getName() != null ? store.getName().toLowerCase() : "";
+        String industry = store.getIndustry() != null ? store.getIndustry().toLowerCase() : "";
+
+        if (name.contains("정육") || name.contains("축산") || industry.contains("정육점") || industry.contains("축산")) {
+            return "육류";
+        }
+        if (name.contains("수산") || industry.contains("수산물")) {
+            return "수산물";
+        }
+        if (name.contains("농산") || name.contains("채소") || name.contains("과일") || industry.contains("농산물") || industry.contains("채소") || industry.contains("과일")) {
+            return "채소";
+        }
+        if (name.contains("반찬") || name.contains("식료") || industry.contains("반찬") || industry.contains("식료품")) {
+            return "반찬";
+        }
+        return "기타";
     }
 }

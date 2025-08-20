@@ -16,6 +16,7 @@ import likelion.traditional_market.common.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import reactor.core.publisher.Mono;
 
 import java.util.Comparator;
 import java.util.List;
@@ -192,9 +193,8 @@ public class MissionService {
         return "";
     }
 
-    // MissionService.java
     @Transactional(readOnly = true)
-    public ApiResponse<List<StoreInfoDto>> getAllCategorizedStores(String userKey) {
+    public Mono<ApiResponse<List<StoreInfoDto>>> getAllCategorizedStores(String userKey) {
         User user = userRepository.findById(userKey)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with key: " + userKey));
 
@@ -202,17 +202,17 @@ public class MissionService {
                 ? user.getMarket()
                 : "역곡남부시장";
 
-        // 비동기 메서드를 호출하고, 최종적으로 블로킹하여 결과를 반환
-        Map<String, List<StoreInfoDto>> storesByCategory = locationService.getAllStoresByMarketAndCategorizeAsync(marketName, 300).block();
+        return locationService.getAllStoresByMarketAndCategorizeAsync(marketName, 300)
+                .map(storesByCategory -> {
+                    // "기타" 카테고리를 최종 응답에서 제외
+                    storesByCategory.remove("기타");
 
-        // "기타" 카테고리를 최종 응답에서 제외
-        storesByCategory.remove("기타");
+                    List<StoreInfoDto> allCategorizedStores = storesByCategory.values().stream()
+                            .flatMap(List::stream)
+                            .distinct()
+                            .collect(Collectors.toList());
 
-        List<StoreInfoDto> allCategorizedStores = storesByCategory.values().stream()
-                .flatMap(List::stream)
-                .distinct()
-                .collect(Collectors.toList());
-
-        return ApiResponse.success("상점 목록 조회 성공", allCategorizedStores);
+                    return ApiResponse.success("상점 목록 조회 성공", allCategorizedStores);
+                });
     }
 }
