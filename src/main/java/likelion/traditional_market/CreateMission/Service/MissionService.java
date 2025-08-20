@@ -192,6 +192,7 @@ public class MissionService {
         return "";
     }
 
+    // MissionService.java
     @Transactional(readOnly = true)
     public ApiResponse<List<StoreInfoDto>> getAllCategorizedStores(String userKey) {
         User user = userRepository.findById(userKey)
@@ -201,7 +202,8 @@ public class MissionService {
                 ? user.getMarket()
                 : "역곡남부시장";
 
-        Map<String, List<StoreInfoDto>> storesByCategory = locationService.getAllStoresByMarketAndCategorize(marketName, 300);
+        // 비동기 메서드를 호출하고, 최종적으로 블로킹하여 결과를 반환
+        Map<String, List<StoreInfoDto>> storesByCategory = locationService.getAllStoresByMarketAndCategorizeAsync(marketName, 300).block();
 
         // "기타" 카테고리를 최종 응답에서 제외
         storesByCategory.remove("기타");

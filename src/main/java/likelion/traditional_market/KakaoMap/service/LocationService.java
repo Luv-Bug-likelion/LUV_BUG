@@ -31,78 +31,22 @@ public class LocationService {
                 .build();
     }
 
-    // 이 메서드는 더 이상 사용하지 않으므로 삭제합니다.
-    private Optional<Map<String, Object>> getMarketCoordinates(WebClient webClient, String marketName) {
-        Map<String, Object> response = webClient.get()
+    // getMarketCoordinates 메서드를 Mono를 반환하도록 수정
+    private Mono<Optional<Map<String, Object>>> getMarketCoordinatesAsync(WebClient webClient, String marketName) {
+        return webClient.get()
                 .uri(uriBuilder -> uriBuilder
                         .path("/search/keyword.json")
                         .queryParam("query", marketName)
                         .build())
                 .retrieve()
                 .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
-                .block();
-        List<Map<String, Object>> documents = (List<Map<String, Object>>) response.get("documents");
-        return documents.stream().findFirst();
+                .map(response -> {
+                    List<Map<String, Object>> documents = (List<Map<String, Object>>) response.get("documents");
+                    return documents.stream().findFirst();
+                });
     }
 
-    // 이 메서드는 더 이상 사용하지 않으므로 삭제합니다.
-    private List<StoreInfoDto> searchStoresByKeyword(WebClient webClient, String keyword, String x, String y, int radius) {
-        Map<String, Object> response = webClient.get()
-                .uri(uriBuilder -> uriBuilder
-                        .path("/search/keyword.json")
-                        .queryParam("query", keyword)
-                        .queryParam("x", x)
-                        .queryParam("y", y)
-                        .queryParam("radius", radius)
-                        .build())
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
-                .block();
-        List<Map<String, Object>> documents = (List<Map<String, Object>>) response.get("documents");
-        return documents.stream()
-                .map(doc -> {
-                    StoreInfoDto store = new StoreInfoDto();
-                    store.setName((String) doc.get("place_name"));
-                    store.setAddress((String) doc.get("address_name"));
-                    store.setPhoneNumber((String) doc.get("phone"));
-                    store.setX((String) doc.get("x"));
-                    store.setY((String) doc.get("y"));
-                    store.setIndustry((String) doc.get("category_name"));
-                    Optional<Map<String,String>> subwayInfo = findSubway(store.getX(), store.getY());
-                    subwayInfo.ifPresent(info->{
-                        store.setSubwayName(info.get("name"));
-                        store.setSubwayDistance(info.get("distance")+"m");
-                    });
-                    return store;
-                })
-                .collect(Collectors.toList());
-    }
-
-    // 이 메서드는 더 이상 사용하지 않으므로 삭제합니다.
-    private Optional<Map<String,String>> findSubway(String x, String y){
-        Map<String,Object> response = kakaoClient().get()
-                .uri(uriBuilder -> uriBuilder
-                        .path("/search/category.json")
-                        .queryParam("category_group_code","SW8")
-                        .queryParam("x",x)
-                        .queryParam("y",y)
-                        .queryParam("radius",1000)
-                        .queryParam("sort","distance")
-                        .build())
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
-                .block();
-        List<Map<String,Object>> documents  = (List<Map<String, Object>>) response.get("documents");
-        if(documents.isEmpty()){
-            return Optional.empty();
-        }
-        Map<String,String> result = new HashMap<>();
-        result.put("name",(String)documents.get(0).get("place_name"));
-        result.put("distance",(String)documents.get(0).get("distance"));
-        return Optional.of(result);
-    }
-
-    // findSubway 메서드를 비동기적으로 동작하도록 수정
+    // findSubway 메서드
     public Mono<Map<String,String>> findSubwayAsync(String x, String y){
         return kakaoClient().get()
                 .uri(uriBuilder -> uriBuilder
@@ -118,7 +62,7 @@ public class LocationService {
                 .map(response -> {
                     List<Map<String,Object>> documents  = (List<Map<String, Object>>) response.get("documents");
                     if(documents.isEmpty()){
-                        return Map.of(); // 빈 맵 반환
+                        return Map.of();
                     }
                     Map<String,String> result = new HashMap<>();
                     result.put("name",(String)documents.get(0).get("place_name"));
@@ -127,59 +71,58 @@ public class LocationService {
                 });
     }
 
-    public Map<String, List<StoreInfoDto>> getAllStoresByMarketAndCategorize(String marketName, int radius) {
+    // getAllStoresByMarketAndCategorize 메서드가 Mono를 반환하도록 수정
+    public Mono<Map<String, List<StoreInfoDto>>> getAllStoresByMarketAndCategorizeAsync(String marketName, int radius) {
         WebClient webClient = kakaoClient();
-        Optional<Map<String, Object>> marketLocation = getMarketCoordinates(webClient, marketName);
-
-        if (marketLocation.isEmpty()) {
-            return Map.of(
-                    "전체", List.of(),
-                    "육류", List.of(),
-                    "수산물", List.of(),
-                    "채소", List.of(),
-                    "반찬", List.of()
-            );
-        }
-
-        String marketX = (String) marketLocation.get().get("x");
-        String marketY = (String) marketLocation.get().get("y");
 
         List<String> keywords = List.of("시장", "마트", "정육점", "수산물", "농산물", "반찬", "식료품", "식당", "분식");
 
-        List<Mono<List<StoreInfoDto>>> storeMonos = keywords.stream()
-                .map(keyword -> searchStoresByKeywordAsync(webClient, keyword, marketX, marketY, radius))
-                .collect(Collectors.toList());
+        return getMarketCoordinatesAsync(webClient, marketName)
+                .flatMap(marketLocationOpt -> {
+                    if (marketLocationOpt.isEmpty()) {
+                        return Mono.just(Map.of("전체", List.of(), "육류", List.of(), "수산물", List.of(), "채소", List.of(), "반찬", List.of()));
+                    }
 
-        List<List<StoreInfoDto>> allStoresList = Mono.zip(storeMonos, (Object[] results) ->
-                Arrays.stream(results)
-                        .map(result -> (List<StoreInfoDto>) result)
-                        .collect(Collectors.toList())
-        ).block();
+                    String marketX = (String) marketLocationOpt.get().get("x");
+                    String marketY = (String) marketLocationOpt.get().get("y");
 
-        Set<StoreInfoDto> allStores = allStoresList.stream()
-                .flatMap(List::stream)
-                .collect(Collectors.toSet());
+                    List<Mono<List<StoreInfoDto>>> storeMonos = keywords.stream()
+                            .map(keyword -> searchStoresByKeywordAsync(webClient, keyword, marketX, marketY, radius))
+                            .collect(Collectors.toList());
 
-        Map<String, String> categoryMap = chatGptService.classifyKeywords(new ArrayList<>(allStores));
+                    return Mono.zip(storeMonos, (Object[] results) ->
+                                    Arrays.stream(results)
+                                            .map(result -> (List<StoreInfoDto>) result)
+                                            .collect(Collectors.toList())
+                            )
+                            .map(allStoresList -> allStoresList.stream()
+                                    .flatMap(List::stream)
+                                    .collect(Collectors.toSet()))
+                            .flatMap(allStores ->
+                                    chatGptService.classifyKeywordsAsync(new ArrayList<>(allStores))
+                                            .map(categoryMap -> {
+                                                Map<String, List<StoreInfoDto>> categorizedStores = new HashMap<>();
+                                                categorizedStores.put("육류", new ArrayList<>());
+                                                categorizedStores.put("수산물", new ArrayList<>());
+                                                categorizedStores.put("채소", new ArrayList<>());
+                                                categorizedStores.put("반찬", new ArrayList<>());
+                                                categorizedStores.put("기타", new ArrayList<>());
 
-        Map<String, List<StoreInfoDto>> categorizedStores = new HashMap<>();
-        categorizedStores.put("육류", new ArrayList<>());
-        categorizedStores.put("수산물", new ArrayList<>());
-        categorizedStores.put("채소", new ArrayList<>());
-        categorizedStores.put("반찬", new ArrayList<>());
-        categorizedStores.put("기타", new ArrayList<>());
-
-        for (StoreInfoDto store : allStores) {
-            String category = categoryMap.getOrDefault(store.getName(), "기타");
-            switch (category) {
-                case "육류" -> categorizedStores.get("육류").add(store);
-                case "수산물" -> categorizedStores.get("수산물").add(store);
-                case "채소" -> categorizedStores.get("채소").add(store);
-                case "반찬" -> categorizedStores.get("반찬").add(store);
-                default -> categorizedStores.get("기타").add(store);
-            }
-        }
-        return categorizedStores;
+                                                for (StoreInfoDto store : allStores) {
+                                                    String category = categoryMap.getOrDefault(store.getName(), "기타");
+                                                    switch (category) {
+                                                        case "육류" -> categorizedStores.get("육류").add(store);
+                                                        case "수산물" -> categorizedStores.get("수산물").add(store);
+                                                        case "채소" -> categorizedStores.get("채소").add(store);
+                                                        case "반찬" -> categorizedStores.get("반찬").add(store);
+                                                        default -> categorizedStores.get("기타").add(store);
+                                                    }
+                                                }
+                                                categorizedStores.remove("기타");
+                                                return categorizedStores;
+                                            })
+                            );
+                });
     }
 
     private Mono<List<StoreInfoDto>> searchStoresByKeywordAsync(WebClient webClient, String keyword, String x, String y, int radius) {
