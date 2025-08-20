@@ -63,7 +63,7 @@ public class ChatGptService {
 
     private String buildPrompt(int storyId, int budget) {
         return String.format(
-                "스토리 ID %d와 예산 %d원을 활용하여, 시장에서 구입할 음식 재료 미션 5개 이상 12개 미만으로 생성해줘. JSON은 'missionTitle', 'missionList' 키를 포함해야 해. 'missionList'의 각 항목은 'missionDetail', 'expectedPrice', 'is_success' 키를 반드시 포함해야 해. 'missionTitle'은 음식 이름으로만 작성하고, 'missionDetail'은 '~을 구매한다' 형식으로 작성해줘. 'is_success' 값은 false로 고정해줘. 응답은 오직 JSON 형식으로만 제공해줘.",
+                "스토리 ID %d와 예산 %d원을 활용하여, 시장에서 구입할 음식 재료 미션 5개 이상 12개 미만으로 생성해줘. JSON은 'missionTitle', 'missionList' 키를 포함해야 해. 'missionList'의 각 항목은 'missionDetail', 'expectedPrice', 'is_success' 키를 반드시 포함해야 해. 'missionTitle'은 시장 재료로 만들 수 있는 음식 이름(한글)으로만 작성하고, 'missionDetail'은 '~을 구매한다' 형식으로 작성해줘. 'is_success' 값은 false로 고정해줘. 응답은 오직 JSON 형식으로만 제공해줘.",
                 storyId,
                 budget
         );
