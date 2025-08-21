@@ -67,7 +67,6 @@ public class ReceiptService {
 
                 return ReceiptCheckResponse.success("영수증 인증 성공", score, ex);
             }
-
             return ReceiptCheckResponse.fail("영수증 인식이 충분하지 않습니다. 재촬영해주세요.");
 
         }
@@ -81,7 +80,7 @@ public class ReceiptService {
         }
         catch(Exception e){
             log.error("알 수 없는 오류 발생",e);
-            return ReceiptCheckResponse.fail("OCR 처리 중 알 수 없는 오류 발생");
+            return ReceiptCheckResponse.fail("OCR 처리 중 알 수 없는 오류 발생"+e.getMessage());
         }
     }
     @Transactional
