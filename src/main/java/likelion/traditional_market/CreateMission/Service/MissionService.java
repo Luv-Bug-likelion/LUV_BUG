@@ -193,8 +193,9 @@ public class MissionService {
         return "";
     }
 
+    // getAllCategorizedStores 메서드를 삭제하고, 모든 식자재 상점을 반환하는 메서드로 대체
     @Transactional(readOnly = true)
-    public Mono<ApiResponse<List<StoreInfoDto>>> getAllCategorizedStores(String userKey) {
+    public Mono<ApiResponse<List<StoreInfoDto>>> getAllFoodStores(String userKey) {
         User user = userRepository.findById(userKey)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with key: " + userKey));
 
@@ -202,17 +203,7 @@ public class MissionService {
                 ? user.getMarket()
                 : "역곡남부시장";
 
-        return locationService.getAllStoresByMarketAndCategorizeAsync(marketName, 300)
-                .map(storesByCategory -> {
-                    // "기타" 카테고리를 최종 응답에서 제외
-                    storesByCategory.remove("기타");
-
-                    List<StoreInfoDto> allCategorizedStores = storesByCategory.values().stream()
-                            .flatMap(List::stream)
-                            .distinct()
-                            .collect(Collectors.toList());
-
-                    return ApiResponse.success("상점 목록 조회 성공", allCategorizedStores);
-                });
+        return locationService.getAllFoodStoresInRadiusAsync(marketName, 300)
+                .map(allStores -> ApiResponse.success("상점 목록 조회 성공", allStores));
     }
 }
