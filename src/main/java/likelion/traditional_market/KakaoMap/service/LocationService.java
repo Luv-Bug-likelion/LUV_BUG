@@ -69,50 +69,6 @@ public class LocationService {
                 });
     }
 
-    public Mono<Map<String, List<StoreInfoDto>>> getAllStoresByMarketAndCategorizeAsync(String marketName, int radius) {
-        WebClient webClient = kakaoClient();
-
-        List<String> keywords = List.of("시장", "마트", "정육점", "수산물", "농산물", "반찬", "식료품", "식당", "분식");
-
-        return getMarketCoordinatesAsync(webClient, marketName)
-                .flatMap(marketLocationOpt -> {
-                    if (marketLocationOpt.isEmpty()) {
-                        return Mono.just(Map.of("전체", List.of(), "육류", List.of(), "수산물", List.of(), "채소", List.of(), "반찬", List.of()));
-                    }
-
-                    String marketX = (String) marketLocationOpt.get().get("x");
-                    String marketY = (String) marketLocationOpt.get().get("y");
-
-                    List<Mono<List<StoreInfoDto>>> storeMonos = keywords.stream()
-                            .map(keyword -> searchStoresByKeywordAsync(webClient, keyword, marketX, marketY, radius))
-                            .collect(Collectors.toList());
-
-                    return Mono.zip(storeMonos, (Object[] results) ->
-                                    Arrays.stream(results)
-                                            .map(result -> (List<StoreInfoDto>) result)
-                                            .collect(Collectors.toList())
-                            )
-                            .map(allStoresList -> allStoresList.stream()
-                                    .flatMap(List::stream)
-                                    .collect(Collectors.toSet()))
-                            .map(allStores -> {
-                                Map<String, List<StoreInfoDto>> categorizedStores = new HashMap<>();
-                                categorizedStores.put("육류", new ArrayList<>());
-                                categorizedStores.put("수산물", new ArrayList<>());
-                                categorizedStores.put("채소", new ArrayList<>());
-                                categorizedStores.put("반찬", new ArrayList<>());
-
-                                for (StoreInfoDto store : allStores) {
-                                    String category = classifyByStoreInfo(store);
-                                    if (categorizedStores.containsKey(category)) {
-                                        categorizedStores.get(category).add(store);
-                                    }
-                                }
-                                return categorizedStores;
-                            });
-                });
-    }
-
     private Mono<List<StoreInfoDto>> searchStoresByKeywordAsync(WebClient webClient, String keyword, String x, String y, int radius) {
         return webClient.get()
                 .uri(uriBuilder -> uriBuilder
@@ -149,23 +105,31 @@ public class LocationService {
                 .collectList();
     }
 
-    // StoreInfoDto 객체를 받아 상점 이름과 업종 정보를 모두 활용하도록 수정
-    private String classifyByStoreInfo(StoreInfoDto store) {
-        String name = store.getName() != null ? store.getName().toLowerCase() : "";
-        String industry = store.getIndustry() != null ? store.getIndustry().toLowerCase() : "";
+    // 식자재, 식품 관련 모든 점포를 단일 리스트로 반환하는 메서드 추가
+    public Mono<List<StoreInfoDto>> getAllFoodStoresInRadiusAsync(String marketName, int radius) {
+        WebClient webClient = kakaoClient();
+        List<String> foodKeywords = List.of("식자재", "식품", "정육점", "수산물", "농산물", "반찬", "마트", "과일", "채소");
 
-        if (name.contains("정육") || name.contains("축산") || industry.contains("정육점") || industry.contains("축산")) {
-            return "육류";
-        }
-        if (name.contains("수산") || industry.contains("수산물")) {
-            return "수산물";
-        }
-        if (name.contains("농산") || name.contains("채소") || name.contains("과일") || industry.contains("농산물") || industry.contains("채소") || industry.contains("과일")) {
-            return "채소";
-        }
-        if (name.contains("반찬") || name.contains("식료") || industry.contains("반찬") || industry.contains("식료품")) {
-            return "반찬";
-        }
-        return "기타";
+        return getMarketCoordinatesAsync(webClient, marketName)
+                .flatMap(marketLocationOpt -> {
+                    if (marketLocationOpt.isEmpty()) {
+                        return Mono.just(List.of());
+                    }
+
+                    String marketX = (String) marketLocationOpt.get().get("x");
+                    String marketY = (String) marketLocationOpt.get().get("y");
+
+                    List<Mono<List<StoreInfoDto>>> storeMonos = foodKeywords.stream()
+                            .map(keyword -> searchStoresByKeywordAsync(webClient, keyword, marketX, marketY, radius))
+                            .collect(Collectors.toList());
+
+                    return Mono.zip(storeMonos, (Object[] results) ->
+                            Arrays.stream(results)
+                                    .map(result -> (List<StoreInfoDto>) result)
+                                    .flatMap(List::stream)
+                                    .distinct()
+                                    .collect(Collectors.toList())
+                    );
+                });
     }
 }

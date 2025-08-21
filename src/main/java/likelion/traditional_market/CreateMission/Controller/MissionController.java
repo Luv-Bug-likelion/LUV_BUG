@@ -32,7 +32,6 @@ public class MissionController {
         return ResponseEntity.ok(response);
     }
 
-    // Mono<ApiResponse<...>>를 반환하도록 수정
     @GetMapping("/stores")
     public Mono<ResponseEntity<ApiResponse<List<StoreInfoDto>>>> getStores(HttpSession session) {
         String userKey = (String) session.getAttribute("userKey");
@@ -40,7 +39,7 @@ public class MissionController {
             return Mono.just(ResponseEntity.badRequest().body(ApiResponse.error(400, "userKey가 없습니다.")));
         }
 
-        return missionService.getAllCategorizedStores(userKey)
+        return missionService.getAllFoodStores(userKey)
                 .map(ResponseEntity::ok);
     }
 }
