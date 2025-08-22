@@ -49,7 +49,6 @@ public class ChatGptService {
         Map<String, Object> choice = ((List<Map<String, Object>>) apiResponse.get("choices")).get(0);
         String content = (String) ((Map<String, Object>) choice.get("message")).get("content");
 
-        // GPT-4o 응답에서 불필요한 백틱과 'json' 키워드 제거
         String cleanedContent = content.replaceAll("```json|```", "").trim();
 
         ObjectMapper objectMapper = new ObjectMapper();
@@ -69,19 +68,27 @@ public class ChatGptService {
         );
     }
 
-    public Mono<Map<String, String>> classifyKeywordsAsync(List<StoreInfoDto> stores) {
-        String prompt = buildClassificationPrompt(stores);
-
+    // 상점 목록을 받아 일괄 분류하는 새로운 메서드 추가
+    public Mono<Map<String, String>> classifyStoresInBatch(List<StoreInfoDto> stores) {
         WebClient webClient = WebClient.builder()
                 .baseUrl("https://api.openai.com/v1/chat/completions")
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + openaiApiKey)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .build();
 
+        String storeListText = stores.stream()
+                .map(s -> String.format("상호명: '%s', 업종: '%s'", s.getName(), s.getIndustry()))
+                .collect(Collectors.joining("\n- ", "- ", ""));
+
+        String prompt = String.format(
+                "다음 상점 목록을 가장 적합한 카테고리로 분류해줘. 각 상점에 대해 상호명과 카테고리를 JSON 형태로 반환해줘. 카테고리는 '육류', '수산물', '채소', '반찬', '기타' 중 하나여야 해. '반찬'에는 시장 내에서 파는 조리된 음식 (예: 족발, 닭강정, 전, 만두)을 포함하고, 식사 메뉴를 판매하는 일반 음식점, 카페, 프랜차이즈, 서비스업 등은 '기타'로 분류해줘. \n\n%s",
+                storeListText
+        );
+
         Map<String, Object> requestBody = Map.of(
-                "model", "gpt-5",
+                "model", "gpt-4o",
                 "messages", List.of(
-                        Map.of("role", "system", "content", "You are a helpful assistant that classifies store information into a JSON format with category names."),
+                        Map.of("role", "system", "content", "You are a helpful assistant that only responds in JSON format where keys are store names and values are their categories."),
                         Map.of("role", "user", "content", prompt)
                 )
         );
@@ -89,28 +96,20 @@ public class ChatGptService {
         return webClient.post()
                 .bodyValue(requestBody)
                 .retrieve()
-                .bodyToMono(Map.class)
+                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
                 .map(apiResponse -> {
                     try {
-                        Map<String, Object> choice = ((List<Map<String, Object>>) apiResponse.get("choices")).get(0);
+                        Map<String, Object> choice = (Map<String, Object>) ((List<Map<String, Object>>) apiResponse.get("choices")).get(0);
                         String content = (String) ((Map<String, Object>) choice.get("message")).get("content");
+
                         ObjectMapper objectMapper = new ObjectMapper();
-                        // TypeReference를 사용하여 올바르게 타입 변환
+                        if (content.startsWith("```json")) {
+                            content = content.substring(7, content.lastIndexOf("```")).trim();
+                        }
                         return objectMapper.readValue(content, new com.fasterxml.jackson.core.type.TypeReference<Map<String, String>>() {});
                     } catch (Exception e) {
                         throw new RuntimeException("Failed to parse ChatGPT response for classification", e);
                     }
                 });
-    }
-
-    private String buildClassificationPrompt(List<StoreInfoDto> stores) {
-        String storeInfo = stores.stream()
-                .map(store -> String.format("{\"name\":\"%s\", \"industry\":\"%s\"}", store.getName(), store.getIndustry()))
-                .collect(Collectors.joining(","));
-
-        return String.format(
-                "다음 상점 목록의 이름과 업종 정보를 참고하여 가장 적합한 카테고리로 분류해줘. 카테고리는 '육류', '수산물', '채소', '반찬', '기타' 중 하나여야 해. '반찬'은 '유통'이라는 상호명과 식품판매 업종으로도 나올 수 있어, 식사 메뉴를 판매하는 일반 음식점 (예: 김밥집, 국수집, 분식집, 정육점이 아닌 일반 고깃집), 카페, 프랜차이즈, 서비스업 등은 '기타'로 분류해줘. 답변은 상점 이름과 카테고리를 JSON 형식으로 묶어서 제공해줘. 예: {\"엄지농산물 역곡중국식품\":\"채소\", \"금산수산\":\"수산물\"}. 상점 목록: [%s]",
-                storeInfo
-        );
     }
 }

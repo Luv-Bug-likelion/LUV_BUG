@@ -8,6 +8,7 @@ import likelion.traditional_market.CreateMission.Entity.UserMission;
 import likelion.traditional_market.CreateMission.Repository.MissionRepository;
 import likelion.traditional_market.CreateMission.Repository.StoryRepository;
 import likelion.traditional_market.CreateMission.Repository.UserMissionRepository;
+import likelion.traditional_market.KakaoMap.dto.MarketStoreListResponse;
 import likelion.traditional_market.KakaoMap.dto.StoreInfoDto;
 import likelion.traditional_market.KakaoMap.service.LocationService;
 import likelion.traditional_market.UserKeyIssue.Entity.User;
@@ -193,9 +194,8 @@ public class MissionService {
         return "";
     }
 
-    // getAllCategorizedStores 메서드를 삭제하고, 모든 식자재 상점을 반환하는 메서드로 대체
     @Transactional(readOnly = true)
-    public Mono<ApiResponse<List<StoreInfoDto>>> getAllFoodStores(String userKey) {
+    public Mono<ApiResponse<MarketStoreListResponse>> getAllFoodStores(String userKey) {
         User user = userRepository.findById(userKey)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with key: " + userKey));
 
@@ -204,6 +204,12 @@ public class MissionService {
                 : "역곡남부시장";
 
         return locationService.getAllFoodStoresInRadiusAsync(marketName, 300)
-                .map(allStores -> ApiResponse.success("상점 목록 조회 성공", allStores));
+                .map(allStores -> {
+                    MarketStoreListResponse responseDto = MarketStoreListResponse.builder()
+                            .marketName(marketName)
+                            .stores(allStores)
+                            .build();
+                    return ApiResponse.success("상점 목록 조회 성공", responseDto);
+                });
     }
 }

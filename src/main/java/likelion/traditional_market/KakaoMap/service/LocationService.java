@@ -105,10 +105,10 @@ public class LocationService {
                 .collectList();
     }
 
-    // 식자재, 식품 관련 모든 점포를 단일 리스트로 반환하는 메서드 추가
     public Mono<List<StoreInfoDto>> getAllFoodStoresInRadiusAsync(String marketName, int radius) {
         WebClient webClient = kakaoClient();
-        List<String> foodKeywords = List.of("식자재", "식품", "정육점", "수산물", "농산물", "반찬", "마트", "과일", "채소");
+
+        List<String> broadKeywords = List.of("시장", "상점", "가게", "점포", "음식점", "마트", "정육점", "축산", "수산물", "횟집", "야채", "농산물", "과일", "건어물", "두부", "방앗간");
 
         return getMarketCoordinatesAsync(webClient, marketName)
                 .flatMap(marketLocationOpt -> {
@@ -119,7 +119,7 @@ public class LocationService {
                     String marketX = (String) marketLocationOpt.get().get("x");
                     String marketY = (String) marketLocationOpt.get().get("y");
 
-                    List<Mono<List<StoreInfoDto>>> storeMonos = foodKeywords.stream()
+                    List<Mono<List<StoreInfoDto>>> storeMonos = broadKeywords.stream()
                             .map(keyword -> searchStoresByKeywordAsync(webClient, keyword, marketX, marketY, radius))
                             .collect(Collectors.toList());
 
