@@ -18,7 +18,7 @@ public class ReceiptParser {
     private static final List<String> KEYWORDS = List.of(
             "영수증", "상품명", "메뉴명","신용카드매출전표", "부가세",
             "합계","현금영수증","승인번호","단가","수량","결제금액","금액","매장명","주소","사업자번호","판매일",
-            "카드신용승인","카드번호","카드명","가맹점명","전화번호","승인금액","정상승인");
+            "카드신용승인","카드번호","카드명","가맹점명","전화번호","승인금액","정상승인","품목명","승인","과세금액","카드승인");
     private static final Pattern P_AMOUNT_KEYED = Pattern.compile("(합계|총\\s*금액|결제\\s*금액)[^0-9]*([0-9,]+)");
     private static final Pattern P_AMOUNT_FREE  = Pattern.compile("([₩]?[0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,})");
     private static final String[] DATE_PATTERNS = new String[] {
