@@ -45,7 +45,6 @@ public class RewardService {
             throw new IllegalStateException("이미 리워드 QR 코드를 발급받았습니다. 하나의 계정으로 한 번만 발급할 수 있습니다.");
         }
 
-
         // 미션 완료 횟수가 3회 미만일 경우 예외 발생
         if (user.getMissionCompleteCount() < 3) {
             throw new IllegalStateException("미션 완료 횟수가 3회 미만입니다. 현재: " + user.getMissionCompleteCount() + "회");
@@ -67,7 +66,6 @@ public class RewardService {
         // QR 코드에 담을 미션 상세 정보 DTO 리스트 생성
         List<MissionRewardDto> missionDataList = missions.stream()
                 .map(mission -> {
-                    // 해당 미션에 대한 UserMission 엔티티를 찾아 영수증 URL과 지출 금액 가져옴
                     UserMission userMission = userMissions.stream()
                             .filter(um -> um.getMissionId() == mission.getMissionId())
                             .findFirst()
@@ -85,11 +83,15 @@ public class RewardService {
                 })
                 .collect(Collectors.toList());
 
+        // 리워드 금액 계산 (총 사용 금액의 10%)
+        int rewardAmount = (int) (user.getTotalSpent() * 0.1);
+
         // QR 코드에 인코딩할 최종 데이터 DTO 생성
         RewardDataDto qrData = RewardDataDto.builder()
                 .userKey(user.getUserKey())
                 .market(user.getMarket())
                 .totalSpent(user.getTotalSpent())
+                .rewardAmount(rewardAmount) // 새로 추가된 필드에 값 할당
                 .missionCompleteCount(user.getMissionCompleteCount())
                 .rewardToken(rewardToken)
                 .missions(missionDataList)
