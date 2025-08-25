@@ -16,8 +16,8 @@ public class ReceiptParser {
 
     //영수증성 키워드(스코어링 용)
     private static final List<String> KEYWORDS = List.of(
-            "영수증", "상품명", "메뉴명","신용카드매출전표", "부가세",
-            "합계","현금영수증","승인번호","단가","수량","결제금액","금액","매장명","주소","사업자번호","판매일",
+            "영수증", "상품명", "상품","메뉴명","신용카드매출전표", "부가세", "대표자","카드매출",
+            "합계","현금영수증","승인번호","승인일시","단가","수량","결제금액","금액","매장명","주소","사업자번호","판매일", "판매시간",
             "카드신용승인","카드번호","카드명","가맹점명","전화번호","승인금액","정상승인","품목명","승인","과세금액","카드승인");
     private static final Pattern P_AMOUNT_KEYED = Pattern.compile("(합계|총\\s*금액|결제\\s*금액)[^0-9]*([0-9,]+)");
     private static final Pattern P_AMOUNT_FREE  = Pattern.compile("([₩]?[0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,})");
@@ -122,7 +122,7 @@ public class ReceiptParser {
     private int normalizeMoney(String raw) {
         try{
             long value = Long.parseLong(raw.replaceAll("[^0-9]", ""));
-            if(value > 10_000_000L) return -1;
+            if(value > 100000) return -1;
             return (int) value;
         } catch(NumberFormatException e) {
             return -1;
