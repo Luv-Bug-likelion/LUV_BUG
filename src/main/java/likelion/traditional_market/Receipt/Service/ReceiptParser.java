@@ -91,16 +91,28 @@ public class ReceiptParser {
     }
 
     private Integer findAmount(String text) {
-        Matcher m = P_AMOUNT_KEYED.matcher(text);
-        if (m.find()) return normalizeMoney(m.group(2));
+        // 1. 사업자 번호와 같은 긴 숫자열을 먼저 제거
+        String cleanedText = text.replaceAll("\\b\\d{3}[-.]?\\d{2}[-.]?\\d{5}\\b", "");
+
+        // 2. 키워드 기반 금액 탐색 (합계, 총 금액 등)
+        Matcher m = P_AMOUNT_KEYED.matcher(cleanedText);
+        if (m.find()) {
+            return normalizeMoney(m.group(2));
+        }
+
+        // 3. 금액으로 추정되는 자유형식의 숫자 탐색
         int best = -1;
-        Matcher m2 = P_AMOUNT_FREE.matcher(text);
+        Matcher m2 = P_AMOUNT_FREE.matcher(cleanedText);
         while (m2.find()) {
             int v = normalizeMoney(m2.group(1));
-            if (v > best && v < 5_000_000) best = v;
+            // 금액은 일반적으로 500만원을 넘지 않는다는 가정을 추가
+            if (v > best && v <= 5_000_000) {
+                best = v;
+            }
         }
         return best == -1 ? null : best;
     }
+
     private LocalDate findDate(String text) {
         for (String p : DATE_PATTERNS) {
             Matcher m = Pattern.compile(p).matcher(text);
@@ -120,9 +132,8 @@ public class ReceiptParser {
         return null;
     }
     private int normalizeMoney(String raw) {
-        try{
+        try {
             long value = Long.parseLong(raw.replaceAll("[^0-9]", ""));
-            if(value > 100000) return -1;
             return (int) value;
         } catch(NumberFormatException e) {
             return -1;
